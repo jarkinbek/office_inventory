@@ -1,0 +1,131 @@
+/* --- АДАПТАЦИЯ ПОД IPHONE И МОБИЛЬНЫЕ (Start) --- */
+
+@media (max-width: 768px) {
+  
+  /* 1. Глобальные настройки */
+  body, #root {
+    padding-top: env(safe-area-inset-top) !important;
+    padding-bottom: env(safe-area-inset-bottom) !important;
+    padding-left: 12px; 
+    padding-right: 12px;
+    overflow-x: hidden; /* Важно: чтобы сама страница не шаталась влево-вправо */
+    background-color: #f5f5f5;
+  }
+
+  /* 2. Шрифт и клики */
+  * {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+    -webkit-tap-highlight-color: transparent;
+    box-sizing: border-box; /* Чтобы padding не ломал ширину */
+  }
+
+  /* ---------------------------------------------------- */
+  /* ИСПРАВЛЕНИЕ "БАРДАКА" СВЕРХУ (ФИЛЬТРЫ И КНОПКИ)    */
+  /* ---------------------------------------------------- */
+  
+  /* Делаем все поля ввода и селекты на всю ширину и друг под другом */
+  .ant-select, 
+  .ant-input, 
+  .ant-picker, 
+  .ant-input-search {
+    width: 100% !important;
+    margin-bottom: 10px !important; /* Отступ снизу между элементами */
+    max-width: none !important;
+  }
+  
+  /* Блоки, в которых лежат кнопки (Import/Export), тоже выстраиваем в колонку */
+  div[style*="flex"], .ant-space, .ant-row {
+    flex-wrap: wrap !important; /* Разрешаем перенос на новую строку */
+    gap: 8px !important; /* Расстояние между элементами */
+  }
+
+  /* Исправление шрифта (зум на айфоне) */
+  input, select, textarea, .ant-input, .ant-select-selector {
+    font-size: 16px !important; 
+    height: 44px !important; /* Удобная высота для пальца */
+    display: flex;
+    align-items: center;
+  }
+
+  /* ---------------------------------------------------- */
+  /* ИСПРАВЛЕНИЕ ТАБЛИЦЫ (ГОРИЗОНТАЛЬНЫЙ СКРОЛЛ)        */
+  /* ---------------------------------------------------- */
+
+  /* Обертка таблицы */
+  .ant-table-wrapper {
+    width: 100vw !important; /* Таблица на всю ширину экрана */
+    margin-left: -12px; /* Компенсируем padding body, чтобы таблица была от края до края */
+    margin-right: -12px;
+    background: transparent;
+  }
+
+  /* Внутренняя часть таблицы, которая должна крутиться */
+  .ant-table {
+    width: 100%;
+    overflow-x: auto !important; /* Включаем скролл */
+    -webkit-overflow-scrolling: touch; /* Плавность iOS */
+    display: block; /* Важно для работы overflow */
+  }
+
+  /* Контент таблицы */
+  .ant-table-content {
+    display: block;
+    width: max-content !important; /* Заставляем таблицу быть широкой, а не сжиматься */
+    min-width: 100%;
+  }
+  
+  /* Ячейки таблицы */
+  .ant-table-tbody > tr > td, 
+  .ant-table-thead > tr > th {
+    white-space: nowrap; /* Запрещаем перенос текста, чтобы колонки были широкими */
+    padding: 12px 10px !important; /* Комфортные отступы */
+  }
+  
+  /* Названия (Системный блок...) можно переносить, если они слишком длинные, 
+     но лучше оставить nowrap для скролла */
+  .ant-table-cell {
+    min-width: 100px; /* Минимальная ширина колонки */
+  }
+
+  /* ---------------------------------------------------- */
+  /* КНОПКИ                                             */
+  /* ---------------------------------------------------- */
+
+  button.ant-btn {
+    height: 44px !important;
+    font-size: 16px !important;
+    border-radius: 10px !important;
+    width: 100%; /* Кнопки на всю ширину (удобно нажимать) */
+    margin-bottom: 8px;
+  }
+
+  /* Кнопки внутри таблицы (редактировать/удалить) оставляем маленькими */
+  .ant-table-wrapper button.ant-btn {
+    width: auto !important;
+    height: 32px !important;
+    margin: 0 4px;
+    display: inline-block;
+  }
+
+  /* ---------------------------------------------------- */
+  /* МОДАЛЬНЫЕ ОКНА                                     */
+  /* ---------------------------------------------------- */
+  .ant-modal {
+    max-width: 100vw !important;
+    margin: 0 !important;
+    top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+  .ant-modal-content {
+    height: 100vh;
+    height: 100dvh;
+    border-radius: 0 !important;
+    display: flex;
+    flex-direction: column;
+  }
+  .ant-modal-body {
+    flex: 1;
+    overflow-y: auto;
+  }
+}
+/* --- АДАПТАЦИЯ ПОД IPHONE (End) --- */

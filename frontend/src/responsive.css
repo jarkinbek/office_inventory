@@ -1,0 +1,136 @@
+/* ==================== MOBILE HEADER FIX (CLEAN VERSION) ==================== */
+
+@media (max-width: 768px) {
+
+    /* Убираем сайдбар */
+    .ant-layout-sider {
+        display: none !important;
+    }
+
+    /* HEADER */
+    .ant-layout-header {
+        height: auto !important;
+        padding: 12px 16px !important;
+
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 10px;
+
+        background: #fff !important;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        z-index: 100;
+    }
+
+    /* ВЕРХНИЙ РЯД: логотип + кнопка */
+    .ant-layout-header > div:first-child {
+        display: flex !important;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+    }
+
+    /* ЛОГО */
+    .logo,
+    .ant-pro-global-header-logo {
+        font-size: 18px !important;
+        font-weight: 700 !important;
+        white-space: nowrap;
+    }
+
+    /* КНОПКА ВЫЙТИ */
+    .ant-layout-header .ant-btn {
+        height: 32px !important;
+        padding: 0 14px !important;
+
+        font-size: 13px !important;
+        border-radius: 6px !important;
+
+        border-color: #ff4d4f !important;
+        color: #ff4d4f !important;
+        background: #fff !important;
+    }
+
+    /* НИЖНИЙ РЯД: Войти как админ */
+    .ant-pro-global-header-right,
+    .right-content,
+    .ant-layout-header .ant-space {
+        width: 100% !important;
+
+        display: flex !important;
+        justify-content: center;
+        align-items: center;
+
+        padding-top: 8px;
+        border-top: 1px solid #f0f0f0;
+    }
+
+    /* ТЕКСТ */
+    .ant-layout-header span {
+        font-size: 14px !important;
+        color: #555;
+    }
+
+    /* Гамбургер */
+    .trigger {
+        margin-right: 10px;
+    }
+
+}
+    /* --- 3. ИСПРАВЛЕНИЕ КОНТЕНТА (ПОИСК И ТАБЛИЦА) --- */
+    .ant-layout-content {
+        padding: 0 12px !important;
+    }
+
+    /* Поля ввода */
+    .ant-select, .ant-input, .ant-picker {
+        width: 100% !important;
+        margin-bottom: 10px !important;
+    }
+
+    /* Поиск */
+    .ant-input-search {
+        display: flex !important;
+        width: 100% !important;
+        margin-bottom: 12px !important;
+    }
+    .ant-input-search .ant-input { margin-bottom: 0 !important; }
+    .ant-input-search .ant-btn { 
+        width: 50px !important; 
+        margin-bottom: 0 !important; 
+    }
+
+    /* Основные кнопки контента (Добавить, Импорт) */
+    .ant-layout-content .ant-btn:not(.ant-input-search-button) {
+        width: 100%;
+        margin-bottom: 10px;
+        height: 40px;
+    }
+
+    /* Кнопки ВНУТРИ таблицы - маленькие */
+    .ant-table-wrapper .ant-btn {
+        width: auto !important;
+        height: 28px !important;
+        display: inline-block !important;
+        margin: 0 2px !important;
+    }
+
+    /* Таблица (Скролл) */
+    .ant-table-wrapper {
+        width: 100% !important;
+        background: #fff;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    .ant-table {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+    .ant-table table {
+        width: max-content !important;
+        min-width: 800px !important;
+    }
+    .ant-table-thead > tr > th, 
+    .ant-table-tbody > tr > td {
+        white-space: nowrap !important;
+        padding: 12px 8px !important;
+    }

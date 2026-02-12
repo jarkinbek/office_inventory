@@ -1,0 +1,27 @@
+# --- Python (Бэкенд) ---
+__pycache__/
+*.pyc
+venv/
+env/
+.env
+
+# --- Базы данных и Логи ---
+*.db
+*.sqlite3
+*.log
+
+# --- Отчеты Excel (чтобы не захламлять) ---
+*.xlsx
+*.xls
+*.csv
+
+# --- Frontend (Node.js) ---
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.DS_Store
+
+# --- Системные файлы ---
+.DS_Store
+Thumbs.db
+.vscode/

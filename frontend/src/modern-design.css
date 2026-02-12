@@ -1,0 +1,247 @@
+/* Modern Design Enhancements */
+
+/* Gradient Header */
+.gradient-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3) !important;
+}
+
+.gradient-header .ant-typography {
+    color: #fff !important;
+}
+
+/* Enhanced Stats Cards */
+.stats-card {
+    border-radius: 16px !important;
+    border: none !important;
+    box-shadow: 0 4px 16px rgba(31, 47, 97, 0.08) !important;
+    transition: all 0.3s ease !important;
+    overflow: hidden;
+    position: relative;
+}
+
+.stats-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+}
+
+.stats-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.2) !important;
+}
+
+/* Gradient Buttons */
+.ant-btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border: none !important;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4) !important;
+    transition: all 0.3s ease !important;
+}
+
+.ant-btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5) !important;
+}
+
+.ant-btn-primary:active {
+    transform: translateY(0);
+}
+
+/* Enhanced Table */
+.modern-table .ant-table {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.modern-table .ant-table-thead>tr>th {
+    background: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%) !important;
+    font-weight: 600;
+    color: #1f2f61;
+    border-bottom: 2px solid #667eea !important;
+}
+
+.modern-table .ant-table-tbody>tr:hover>td {
+    background: #f8f9ff !important;
+}
+
+.modern-table .ant-table-tbody>tr>td {
+    transition: all 0.2s ease;
+}
+
+/* Striped Table Rows */
+.modern-table .ant-table-tbody>tr:nth-child(even) {
+    background: #fafbff;
+}
+
+/* Icon Containers */
+.icon-container {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+}
+
+.icon-container:hover {
+    transform: scale(1.1);
+}
+
+.icon-container.blue {
+    background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+}
+
+.icon-container.green {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.icon-container.red {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+.icon-container.purple {
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+}
+
+/* Enhanced Input Fields */
+.modern-input .ant-input,
+.modern-input .ant-select-selector {
+    border-radius: 10px !important;
+    border: 2px solid #e5e7eb !important;
+    transition: all 0.3s ease !important;
+}
+
+.modern-input .ant-input:focus,
+.modern-input .ant-select-selector:focus,
+.modern-input .ant-select-focused .ant-select-selector {
+    border-color: #667eea !important;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
+}
+
+/* Modal Enhancements */
+.ant-modal-content {
+    border-radius: 16px !important;
+    overflow: hidden;
+}
+
+.ant-modal-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border-bottom: none !important;
+    padding: 20px 24px !important;
+}
+
+.ant-modal-title {
+    color: #fff !important;
+    font-size: 18px !important;
+    font-weight: 600 !important;
+}
+
+.ant-modal-close {
+    color: #fff !important;
+}
+
+.ant-modal-close:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Tag Enhancements */
+.ant-tag {
+    border-radius: 8px;
+    padding: 4px 12px;
+    font-weight: 500;
+    border: none;
+}
+
+/* Loading Animation */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.4s ease;
+}
+
+/* Card Container */
+.content-card {
+    background: #fff;
+    padding: 32px;
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(31, 47, 97, 0.08);
+    border: 1px solid #e5e7eb;
+}
+
+/* Drawer Improvements */
+.ant-drawer-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border-bottom: none !important;
+}
+
+.ant-drawer-title {
+    color: #fff !important;
+}
+
+.ant-drawer-close {
+    color: #fff !important;
+}
+
+/* Sidebar Menu */
+.modern-sidebar .ant-menu-item-selected {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    color: #fff !important;
+}
+
+.modern-sidebar .ant-menu-item {
+    border-radius: 8px;
+    margin: 4px 8px;
+    transition: all 0.3s ease;
+}
+
+.modern-sidebar .ant-menu-item:hover {
+    background: #f3f4f6;
+    transform: translateX(4px);
+}
+
+/* Statistic Value Colors */
+.ant-statistic-content-value {
+    font-weight: 700 !important;
+}
+
+/* Smooth Transitions */
+* {
+    transition-property: transform, box-shadow, background-color;
+    transition-duration: 0.3s;
+    transition-timing-function: ease;
+}
+
+/* Button Hover Effects */
+.ant-btn:not(.ant-btn-primary):hover {
+    border-color: #667eea !important;
+    color: #667eea !important;
+}
+
+/* Search Input Enhancement */
+.search-input {
+    border-radius: 12px !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
+}
+
+.search-input:focus {
+    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.2) !important;
+}
