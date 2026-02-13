@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://192.168.5.122:5173")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://192.168.5.122:84")
 
 # Создаем таблицы
 models.Base.metadata.create_all(bind=engine)
