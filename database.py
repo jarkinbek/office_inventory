@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker
 
 # --- НАСТРОЙКИ ДЛЯ MySQL (XAMPP) ---
 # Если порт 3306 занят, поменяй на 3307 или тот, что в XAMPP
-SQLALCHEMY_DATABASE_URL = "mysql+pymysql://root:@localhost:3306/office_db"
+SQLALCHEMY_DATABASE_URL = "mysql+pymysql://office_user:@localhost:3306/office_inventory"
 
 # ВАЖНО: Для MySQL мы убрали connect_args={"check_same_thread": False}
 # Эта строчка была нужна ТОЛЬКО для SQLite
