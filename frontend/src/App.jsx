@@ -23,7 +23,7 @@ const { Option } = Select;
 const { TextArea } = Input;
 
 // АВТОМАТИЧЕСКИЙ АДРЕС СЕРВЕРА
-const API_URL = `http://${window.location.hostname}:8000`;
+const API_URL = `http://${window.location.hostname}:84`;
 
 function App() {
   const [lang, setLang] = useState('ru');
