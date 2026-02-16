@@ -1,62 +1,71 @@
 import { useState, useEffect } from 'react';
+import axios from 'axios';
+import { QRCodeCanvas } from 'qrcode.react';
 import {
   Layout, Menu, Button, Table, Tag, Input, Select, Modal, Form,
-  message, Row, Col, Typography, Space, Popconfirm, Card, Statistic, Tooltip, Upload, Drawer
+  message, Row, Col, Typography, Space, Popconfirm, List, Empty, Card, Statistic, Descriptions, Tooltip, Tabs, Upload, Drawer
 } from 'antd';
 import {
-  AppstoreOutlined, UserOutlined, LogoutOutlined, PlusOutlined, SearchOutlined,
-  FilterOutlined, DeleteOutlined, EditOutlined, BankOutlined, EyeOutlined,
-  LockOutlined, ArrowLeftOutlined, LaptopOutlined, TeamOutlined,
-  BookOutlined, DownloadOutlined, UploadOutlined, MenuOutlined, PrinterOutlined
+  AppstoreOutlined, UserOutlined,
+  LogoutOutlined, PlusOutlined, SearchOutlined, FilterOutlined,
+  DeleteOutlined, EditOutlined, BankOutlined, EyeOutlined,
+  LockOutlined, ArrowLeftOutlined, LaptopOutlined, SettingTwoTone, PoweroffOutlined,
+  TeamOutlined, BookOutlined, DownloadOutlined, UploadOutlined, MenuOutlined, PrinterOutlined
 } from '@ant-design/icons';
 
-// --- NEW IMPORTS: HOOKS, COMPONENTS, UTILS ---
-import { useAuth, useData, useCRUD } from './hooks';
-import { SharedModals, LanguageSwitcher } from './components';
+// Убедись, что эти компоненты существуют, или удали импорт, если они встроены
+import { LanguageSwitcher } from './components/LanguageSwitcher'; 
 import { translations } from './utils/translations';
-import { getStatusColor, getStatusLabel, downloadQRCode } from './utils/helpers';
 import './responsive.css';
-import './modern-design.css';
 
 const { Header, Sider, Content } = Layout;
 const { Option } = Select;
+const { TextArea } = Input;
+
+// АВТОМАТИЧЕСКИЙ АДРЕС СЕРВЕРА
+const API_URL = `http://${window.location.hostname}:8000`;
 
 function App() {
   const [lang, setLang] = useState('ru');
   const t = (key) => translations[lang][key] || key;
 
-  // --- CUSTOM HOOKS ---
-  const { isAuthenticated, appMode, login, logout, enterAdminMode, exitAdminMode } = useAuth();
-  const { rooms, allDevices, employees, categories, loading, fetchData, setAllDevices } = useData(isAuthenticated);
-  const crud = useCRUD(fetchData, t);
+  // --- AUTH STATE (БЕЗ HOOKS) ---
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    localStorage.getItem('site_auth') === 'true'
+  );
 
-  // --- LOCAL STATE ---
-  const [activePage, setActivePage] = useState('dashboard');
   const [loginForm] = Form.useForm();
+  const [appMode, setAppMode] = useState('public');
+  const [activePage, setActivePage] = useState('dashboard');
 
-  // Filters
+  // --- DATA STATE (БЕЗОПАСНАЯ ИНИЦИАЛИЗАЦИЯ) ---
+  // Мы сразу создаем пустые массивы [], чтобы сайт не падал
+  const [rooms, setRooms] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [allDevices, setAllDevices] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  // Auth & Filters
+  const [isAdminLoginModalOpen, setIsAdminLoginModalOpen] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+
+  // ФИЛЬТРЫ
   const [searchText, setSearchText] = useState('');
   const [filterRoom, setFilterRoom] = useState(null);
   const [filterCategory, setFilterCategory] = useState(null);
   const [filterStatus, setFilterStatus] = useState(null);
+  const [selectedDevices, setSelectedDevices] = useState([]); 
 
-  // Mobile
+  // MOBILE STATE
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [drawerVisible, setDrawerVisible] = useState(false);
 
-  // Pagination
+  // ПАГИНАЦИЯ
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  // QR Mass Print
-  const [selectedDevices, setSelectedDevices] = useState([]);
-
-  // QR Card Mode - shows only device card when opened from QR scan
-  const [isQRMode, setIsQRMode] = useState(false);
-  const [qrDevice, setQrDevice] = useState(null);
-
   // Modals
-  const [isAdminLoginModalOpen, setIsAdminLoginModalOpen] = useState(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -65,568 +74,634 @@ function App() {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
-  // Editing states
+  // States for Editing
   const [selectedUser, setSelectedUser] = useState(null);
   const [editingDevice, setEditingDevice] = useState(null);
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [editingRoom, setEditingRoom] = useState(null);
   const [editingCategory, setEditingCategory] = useState(null);
   const [viewDevice, setViewDevice] = useState(null);
-  const [adminPassword, setAdminPassword] = useState('');
 
-  // Forms
   const [productForm] = Form.useForm();
   const [roomForm] = Form.useForm();
   const [categoryForm] = Form.useForm();
   const [employeeForm] = Form.useForm();
 
-  // --- LOGIN/LOGOUT HANDLERS ---
-  const handleGlobalLogin = async (values) => {
-    const result = await login(values.username, values.password);
-    if (result.success) {
+  // --- ЛОГИКА АВТОРИЗАЦИИ ---
+  const handleGlobalLogin = (values) => {
+    // Простой вход (можно усложнить позже)
+    if ((values.username === 'admin' && values.password === 'admin') || 
+        (values.username === 'user' && values.password === 'user')) {
+      localStorage.setItem('site_auth', 'true');
+      setIsAuthenticated(true);
       message.success(t('welcome_user'));
+      fetchData(); 
     } else {
       message.error(t('wrong_pass'));
     }
   };
 
   const handleGlobalLogout = () => {
-    logout();
-    setActivePage('dashboard');
+    localStorage.removeItem('site_auth');
+    setIsAuthenticated(false);
     setAppMode('public');
-    message.info(t('logout'));
   };
 
-  const handleAdminLogin = () => {
-    if (adminPassword === 'admin123') {
-      enterAdminMode();
-      setIsAdminLoginModalOpen(false);
-      setAdminPassword('');
-      message.success(t('welcome_admin'));
-    } else {
-      message.error(t('wrong_pass'));
+  const handleAdminLogin = () => { 
+    if (adminPassword === 'admin123') { 
+        setAppMode('admin'); 
+        setIsAdminLoginModalOpen(false); 
+        setAdminPassword(''); 
+        message.success(t('welcome_admin')); 
+    } else { 
+        message.error(t('wrong_pass')); 
+    } 
+  };
+
+  const exitAdminMode = () => {
+      setAppMode('public');
+  };
+
+  // --- ЗАГРУЗКА ДАННЫХ (БЕЗОПАСНАЯ) ---
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const res = await axios.get(`${API_URL}/report`);
+      
+      // ЗАЩИТА ОТ ПУСТОЙ БАЗЫ
+      // Если данных нет, используем пустой массив []. 
+      // Это предотвращает ошибку "undefined reading forEach"
+      const roomsData = res.data.rooms || [];
+      const employeesData = res.data.employees || [];
+      const categoriesData = res.data.categories || [];
+      
+      setRooms(roomsData);
+      setEmployees(employeesData);
+      setCategories(categoriesData);
+
+      const devices = [];
+      // Безопасный перебор
+      if (Array.isArray(roomsData)) {
+        roomsData.forEach(room => {
+          const roomDevices = room.devices || [];
+          roomDevices.forEach(dev => {
+            devices.push({ ...dev, key: dev.id, room_id: room.id, room_name: room.room_name, floor: room.floor });
+          });
+        });
+      }
+      setAllDevices(devices);
+
+      // Проверка QR ссылки
+      const params = new URLSearchParams(window.location.search);
+      const qrId = params.get('qr_id');
+      if (qrId) {
+        const targetDevice = devices.find(d => d.id === parseInt(qrId));
+        if (targetDevice) {
+          setViewDevice(targetDevice);
+          setIsViewModalOpen(true);
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }
+
+    } catch (e) { 
+      console.error("Ошибка соединения (возможно сервер спит):", e); 
+    } finally { 
+      setLoading(false); 
     }
   };
 
-  // --- QR HANDLING ON PAGE LOAD ---
   useEffect(() => {
-    const checkQRParam = async () => {
-      const params = new URLSearchParams(window.location.search);
-      const qrId = params.get('qr_id');
-      if (qrId && allDevices.length > 0) {
-        const targetDevice = allDevices.find(d => d.id === parseInt(qrId));
-        if (targetDevice) {
-          setQrDevice(targetDevice);
-          setIsQRMode(true);
-        }
-      }
-    };
-    checkQRParam();
-  }, [allDevices]);
+    if (isAuthenticated) fetchData();
+  }, [isAuthenticated]);
 
-  // --- MOBILE RESIZE ---
+  // Mobile detection
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // --- FILTERS RESET PAGE ---
+  // Сброс страницы при фильтрации
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchText, filterRoom, filterCategory, filterStatus, activePage]);
+  }, [searchText, filterRoom, filterCategory, filterStatus]);
 
-  // --- EXPORT/IMPORT ---
-  const handleExport = () => crud.handleExport(lang);
-
-  const handlePrintQR = async () => {
-    const success = await crud.handlePrintQR(selectedDevices, t);
-    if (success) setSelectedDevices([]);
+  // --- ACTIONS (EXPORT / IMPORT / QR) ---
+  const handleExport = () => {
+    window.open(`${API_URL}/export_excel?lang=${lang}`, '_blank');
   };
 
   const handleImport = async (options) => {
-    await crud.handleImport(options.file, options.onSuccess, options.onError);
-    setIsImportModalOpen(false);
+    const { file, onSuccess, onError } = options;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      await axios.post(`${API_URL}/import_excel`, formData);
+      message.success('Импорт успешно завершен!');
+      onSuccess("Ok");
+      setIsImportModalOpen(false);
+      fetchData();
+    } catch (err) {
+      message.error('Ошибка импорта');
+      onError({ err });
+    }
   };
 
-  // --- MODAL OPENERS ---
+  const handlePrintQR = async () => {
+    if (selectedDevices.length === 0) {
+        message.warning("Выберите устройства для печати");
+        return;
+    }
+    try {
+        const response = await axios.post(`${API_URL}/export_qr_pdf`, { device_ids: selectedDevices }, { responseType: 'blob' });
+        const url = window.URL.createObjectURL(new Blob([response.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `qr_labels_${selectedDevices.length}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        setSelectedDevices([]); // сброс выбора
+        message.success("PDF скачан");
+    } catch (e) {
+        message.error("Ошибка печати QR");
+    }
+  };
+
+  const downloadQRCode = () => {
+    const qrCanvas = document.getElementById("qr-gen");
+    if (!qrCanvas) return;
+    const padding = 20;
+    const textHeight = 40; 
+    const width = qrCanvas.width + padding * 2;
+    const height = qrCanvas.height + padding * 2 + textHeight;
+    const combinedCanvas = document.createElement("canvas");
+    combinedCanvas.width = width;
+    combinedCanvas.height = height;
+    const ctx = combinedCanvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(qrCanvas, padding, padding);
+    ctx.font = "bold 24px Arial";
+    ctx.fillStyle = "#000000";
+    ctx.textAlign = "center";
+    ctx.fillText(viewDevice?.inventory_number || '', width / 2, height - padding);
+    const pngUrl = combinedCanvas.toDataURL("image/png").replace("image/png", "image/octet-stream");
+    let downloadLink = document.createElement("a");
+    downloadLink.href = pngUrl;
+    downloadLink.download = `qr_${viewDevice?.inventory_number}.png`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+  };
+
+  // --- CRUD OPERATIONS ---
+  const handleSaveRoom = async (values) => {
+    try {
+      if (editingRoom) { await axios.put(`${API_URL}/rooms/${editingRoom.id}`, values); message.success('Комната обновлена'); }
+      else { await axios.post(`${API_URL}/rooms/`, values); message.success(t('msg_success_add')); }
+      setIsRoomModalOpen(false); roomForm.resetFields(); setEditingRoom(null); fetchData();
+    } catch (e) { message.error(t('msg_error')); }
+  };
+  const handleDeleteRoom = async (id) => { try { await axios.delete(`${API_URL}/rooms/${id}`); message.success(t('msg_success_del')); fetchData(); } catch (e) { message.error(t('msg_error')); } };
+
+  const handleSaveCategory = async (values) => {
+    try {
+      if (editingCategory) { await axios.put(`${API_URL}/categories/${editingCategory.id}`, values); message.success('Категория обновлена'); }
+      else { await axios.post(`${API_URL}/categories/`, values); message.success(t('msg_success_add')); }
+      setIsCategoryModalOpen(false); categoryForm.resetFields(); setEditingCategory(null); fetchData();
+    } catch (e) { message.error(t('msg_error')); }
+  };
+  const handleDeleteCategory = async (id) => { try { await axios.delete(`${API_URL}/categories/${id}`); message.success(t('msg_success_del')); fetchData(); } catch (e) { message.error(t('msg_error')); } };
+
+  const handleSaveProduct = async (values) => {
+    // Проверка дубликатов
+    if (values.inventory_number) {
+      // Ипользуем (allDevices || []), чтобы избежать ошибки undefined
+      const isDuplicate = (allDevices || []).some(d => d.inventory_number === values.inventory_number && (!editingDevice || d.id !== editingDevice.id));
+      if (isDuplicate) { message.error(t('msg_duplicate_id')); return; }
+    }
+    try {
+      if (editingDevice) { await axios.put(`${API_URL}/devices/${editingDevice.id}`, values); message.success(t('msg_success_add')); }
+      else { await axios.post(`${API_URL}/devices/`, values); message.success(t('msg_success_add')); }
+      setIsProductModalOpen(false); productForm.resetFields(); setEditingDevice(null); fetchData();
+    } catch (e) { message.error(t('msg_error')); }
+  };
+  const handleDeleteDevice = async (id) => { try { await axios.delete(`${API_URL}/devices/${id}`); message.success(t('msg_success_del')); setIsProductModalOpen(false); fetchData(); } catch (e) { message.error(t('msg_error')); } };
+
+  const handleSaveEmployee = async (values) => {
+    try {
+      if (editingEmployee) { await axios.put(`${API_URL}/employees/${editingEmployee.id}`, values); message.success('Сотрудник обновлен!'); }
+      else { await axios.post(`${API_URL}/employees/`, values); message.success(t('msg_success_add')); }
+      setIsEmployeeModalOpen(false); employeeForm.resetFields(); setEditingEmployee(null); fetchData();
+    } catch (e) { message.error(t('msg_error')); }
+  };
+  const handleDeleteEmployee = async (id) => { try { await axios.delete(`${API_URL}/employees/${id}`); message.success(t('msg_success_del')); fetchData(); } catch (e) { message.error(t('msg_error')); } };
+
+
+  // --- FILTER LOGIC (С ЗАЩИТОЙ) ---
+  const filteredDevices = (allDevices || []).filter(d => {
+    const text = searchText.toLowerCase();
+    const matchesSearch = 
+      String(d.id).includes(text) || 
+      (d.name || "").toLowerCase().includes(text) || 
+      (d.price && String(d.price).toLowerCase().includes(text)) || 
+      (d.inventory_number && String(d.inventory_number).toLowerCase().includes(text)) || 
+      (d.owner_name && String(d.owner_name).toLowerCase().includes(text));
+
+    const matchesRoom = filterRoom ? d.room_id === filterRoom : true;
+    const matchesCategory = filterCategory ? d.type === filterCategory : true;
+    const matchesStatus = filterStatus ? d.status === filterStatus : true;
+    return matchesSearch && matchesRoom && matchesCategory && matchesStatus;
+  });
+
+  const filteredEmployees = (employees || []).filter(e => (e.full_name || "").toLowerCase().includes(searchText.toLowerCase()));
+  
+  const resetFilters = () => { 
+    setSearchText(''); 
+    setFilterRoom(null); 
+    setFilterCategory(null); 
+    setFilterStatus(null); 
+    setCurrentPage(1); 
+  };
+
+  // --- HELPERS ---
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'working': return 'green';
+      case 'in_stock': return 'blue';
+      case 'repair': return 'orange';
+      case 'broken': return 'red';
+      case 'decommissioned': return 'default';
+      default: return 'default';
+    }
+  };
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case 'working': return lang === 'uz' ? 'Ishlayapti' : 'В работе';
+      case 'in_stock': return lang === 'uz' ? 'Omborda' : 'На складе';
+      case 'repair': return lang === 'uz' ? 'Ta\'mirda' : 'В ремонте';
+      case 'broken': return lang === 'uz' ? 'Buzilgan' : 'Сломано';
+      case 'decommissioned': return lang === 'uz' ? 'Hisobdan chiqarilgan' : 'Списано';
+      default: return status;
+    }
+  };
+
   const openCreateProductModal = () => { setEditingDevice(null); productForm.resetFields(); setIsProductModalOpen(true); };
   const openEditProductModal = (record) => { setEditingDevice(record); productForm.setFieldsValue(record); setIsProductModalOpen(true); };
   const openCreateEmployeeModal = () => { setEditingEmployee(null); employeeForm.resetFields(); setIsEmployeeModalOpen(true); };
   const openEditEmployeeModal = (record) => { setEditingEmployee(record); employeeForm.setFieldsValue(record); setIsEmployeeModalOpen(true); };
   const openCreateRoomModal = () => { setEditingRoom(null); roomForm.resetFields(); setIsRoomModalOpen(true); };
-  const openEditRoomModal = (record) => { setEditingRoom(record); roomForm.setFieldsValue(record); setIsRoomModalOpen(true); };
+  const openEditRoomModal = (record) => { setEditingRoom(record); roomForm.setFieldsValue({ name: record.room_name }); setIsRoomModalOpen(true); };
   const openCreateCategoryModal = () => { setEditingCategory(null); categoryForm.resetFields(); setIsCategoryModalOpen(true); };
-  const openEditCategoryModal = (record) => { setEditingCategory(record); categoryForm.setFieldsValue(record); setIsCategoryModalOpen(true); };
+  const openEditCategoryModal = (record) => { setEditingCategory(record); categoryForm.setFieldsValue({ name: record.name }); setIsCategoryModalOpen(true); };
+  const openUserAssets = (user) => { setSelectedUser(user); setIsUserAssetsModalOpen(true); };
   const openViewModal = (record) => { setViewDevice(record); setIsViewModalOpen(true); };
 
-  // --- CRUD HANDLERS ---
-  const handleSaveProduct = async (values) => {
-    await crud.saveDevice(values, editingDevice);
-    setIsProductModalOpen(false);
-    productForm.resetFields();
-  };
-
-  const handleSaveEmployee = async (values) => {
-    await crud.saveEmployee(values, editingEmployee);
-    setIsEmployeeModalOpen(false);
-    employeeForm.resetFields();
-  };
-
-  const handleSaveRoom = async (values) => {
-    await crud.saveRoom(values, editingRoom);
-    setIsRoomModalOpen(false);
-    roomForm.resetFields();
-  };
-
-  const handleSaveCategory = async (values) => {
-    await crud.saveCategory(values, editingCategory);
-    setIsCategoryModalOpen(false);
-    categoryForm.resetFields();
-  };
-
-  // --- FILTERED DATA ---
-  const filteredDevices = allDevices.filter(d => {
-    const matchSearch = !searchText ||
-      d.name?.toLowerCase().includes(searchText.toLowerCase()) ||
-      d.inventory_number?.toLowerCase().includes(searchText.toLowerCase()) ||
-      d.owner_name?.toLowerCase().includes(searchText.toLowerCase());
-    const matchRoom = !filterRoom || d.room_id === filterRoom;
-    const matchCategory = !filterCategory || d.type === filterCategory;
-    const matchStatus = !filterStatus || d.status === filterStatus;
-    return matchSearch && matchRoom && matchCategory && matchStatus;
-  });
-
-  const paginatedDevices = filteredDevices.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-
-  // --- STATS ---
-  const stats = {
-    total: allDevices.length,
-    assigned: allDevices.filter(d => d.employee_id).length,
-    broken: allDevices.filter(d => d.status === 'broken' || d.status === 'repair').length,
-    rooms: rooms.length
-  };
-
-  // --- TABLE COLUMNS ---
-  const adminColumns = [
-    {
-      title: t('col_id'),
-      dataIndex: 'id',
-      width: 60,
-      render: (text, record, index) => (currentPage - 1) * pageSize + index + 1
-    },
-    {
-      title: t('col_inv'),
-      dataIndex: 'inventory_number',
-      width: 120,
-      render: (text, record) => (
-        <a onClick={() => openViewModal(record)} style={{ color: '#1890ff', cursor: 'pointer' }}>
-          {text || '-'}
-        </a>
-      )
-    },
-    { title: t('col_product'), dataIndex: 'name' },
-    { title: t('label_cat'), dataIndex: 'type' },
-    { title: t('col_location'), dataIndex: 'room_name' },
-    { title: t('col_user'), dataIndex: 'owner_name' },
-    {
-      title: t('col_status'),
-      dataIndex: 'status',
-      render: (status) => <Tag color={getStatusColor(status)}>{getStatusLabel(status, lang)}</Tag>
-    },
-    {
-      title: t('col_action'),
-      render: (_, rec) => (
-        <Space>
-          <Tooltip title="View"><Button icon={<EyeOutlined />} size="small" onClick={() => openViewModal(rec)} /></Tooltip>
-          {appMode === 'admin' && (
-            <>
-              <Tooltip title="Edit"><Button icon={<EditOutlined />} size="small" onClick={() => openEditProductModal(rec)} /></Tooltip>
-              <Popconfirm title={t('delete_confirm')} onConfirm={() => crud.deleteDevice(rec.id)}>
-                <Button icon={<DeleteOutlined />} size="small" danger />
-              </Popconfirm>
-            </>
-          )}
-          <Tooltip title="Скопировать ссылку">
-            <Button size="small" icon={<BookOutlined />} onClick={() => {
-              const link = `${window.location.origin}/?qr_id=${rec.id}`;
-              try {
-                const textArea = document.createElement('textarea');
-                textArea.value = link;
-                textArea.style.position = 'fixed';
-                textArea.style.left = '-9999px';
-                document.body.appendChild(textArea);
-                textArea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textArea);
-                message.success('Ссылка скопирована: ' + link);
-              } catch (err) {
-                prompt('Скопируйте ссылку:', link);
-              }
-            }} />
-          </Tooltip>
-        </Space>
-      )
-    }
+  // --- COLUMNS ---
+  const publicColumns = [
+    { title: '№', key: 'index', width: 50, render: (text, record, index) => <b>{index + 1}</b> },
+    { title: t('col_inv'), dataIndex: 'inventory_number', render: (t, r) => t ? <a onClick={() => openViewModal(r)} style={{ fontWeight: 'bold' }}>{t}</a> : '-' },
+    { title: t('col_user'), dataIndex: 'owner_name', render: t => t ? <Tag color="purple">{t}</Tag> : <span style={{ color: '#ccc' }}>-</span> },
+    { title: t('col_product'), dataIndex: 'name', render: t => <b>{t}</b> },
+    { title: t('label_cat'), dataIndex: 'type', render: t => <Tag color="cyan">{t}</Tag> },
+    { title: 'Прайс', dataIndex: 'price', render: t => <Tag color="gold">{t || '0'}</Tag> },
+    { title: t('col_location'), dataIndex: 'room_name', render: t => <Tag color="blue">{t}</Tag> },
+    { title: t('col_details'), dataIndex: 'details', render: t => t ? <span style={{ color: '#666' }}>{t && t.length > 15 ? t.substring(0, 15) + '...' : t}</span> : '-' },
+    { title: t('col_status'), dataIndex: 'status', render: s => <Tag color={getStatusColor(s)}>{getStatusLabel(s)}</Tag> },
+  ];
+  const adminColumns = [...publicColumns, { title: t('col_action'), key: 'action', render: (_, r) => <Button icon={<EditOutlined />} onClick={() => openEditProductModal(r)} size="small" /> }];
+  const empColumns = [
+    { title: t('col_full_name'), dataIndex: 'full_name', render: t => <b>{t}</b> },
+    { title: t('col_position'), dataIndex: 'position', render: t => <Tag>{t}</Tag> },
+    { title: t('col_assets'), key: 'assets', align: 'center', render: (_, rec) => <Button type="dashed" shape="circle" icon={<EyeOutlined />} onClick={() => openUserAssets(rec)} /> },
+    { title: t('col_action'), key: 'action', render: (_, rec) => (<Space><Button type="default" icon={<EditOutlined />} onClick={() => openEditEmployeeModal(rec)} /><Popconfirm title={t('delete_confirm')} onConfirm={() => handleDeleteEmployee(rec.id)}><Button danger type="text" icon={<DeleteOutlined />} /></Popconfirm></Space>) },
+  ];
+  const roomColumns = [
+    { title: 'Название', dataIndex: 'room_name', render: t => <b>{t}</b> },
+    { title: 'Действие', key: 'action', render: (_, rec) => (<Space><Button type="default" icon={<EditOutlined />} onClick={() => openEditRoomModal(rec)} /><Popconfirm title="Удалить комнату?" onConfirm={() => handleDeleteRoom(rec.id)}><Button danger type="text" icon={<DeleteOutlined />} /></Popconfirm></Space>) },
+  ];
+  const categoryColumns = [
+    { title: 'Название', dataIndex: 'name', render: t => <b>{t}</b> },
+    { title: 'Действие', key: 'action', render: (_, rec) => (<Space><Button type="default" icon={<EditOutlined />} onClick={() => openEditCategoryModal(rec)} /><Popconfirm title="Удалить категорию?" onConfirm={() => handleDeleteCategory(rec.id)}><Button danger type="text" icon={<DeleteOutlined />} /></Popconfirm></Space>) },
   ];
 
-  // --- RENDER QR CARD MODE (only device card, no app UI) ---
-  if (isQRMode && qrDevice) {
-    return (
-      <Layout style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)' }}>
-        <Content style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
-          <Card
-            style={{
-              width: '100%',
-              maxWidth: 500,
-              borderRadius: 16,
-              overflow: 'hidden',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-              border: 'none'
-            }}
-          >
-            {/* Header */}
-            <div style={{
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              margin: '-24px -24px 24px -24px',
-              padding: '30px 24px',
-              textAlign: 'center'
-            }}>
-              <LaptopOutlined style={{ fontSize: 48, color: 'white', marginBottom: 12 }} />
-              <Typography.Title level={3} style={{ color: 'white', margin: 0 }}>
-                {qrDevice.name}
-              </Typography.Title>
-              <Tag color={getStatusColor(qrDevice.status)} style={{ marginTop: 8, fontSize: 14, padding: '4px 16px' }}>
-                {getStatusLabel(qrDevice.status, lang)}
-              </Tag>
-            </div>
+  const menuItems = [
+    { key: 'dashboard', icon: <AppstoreOutlined />, label: t('dashboard') },
+    { key: 'references', icon: <BookOutlined />, label: 'Справочники' },
+    { key: 'logout', icon: <LogoutOutlined />, label: t('logout'), danger: true, style: { marginTop: '50px' } },
+  ];
 
-            {/* Device Info */}
-            <div style={{ fontSize: 16 }}>
-              <Row gutter={[16, 20]}>
-                <Col span={12}>
-                  <div style={{ color: '#888', fontSize: 12, marginBottom: 4 }}>{t('col_inv')}</div>
-                  <div style={{ fontWeight: 'bold', fontSize: 18, color: '#1a1a2e' }}>{qrDevice.inventory_number || '-'}</div>
-                </Col>
-                <Col span={12}>
-                  <div style={{ color: '#888', fontSize: 12, marginBottom: 4 }}>{t('label_cat')}</div>
-                  <div style={{ fontWeight: 'bold', color: '#1a1a2e' }}>{qrDevice.type || '-'}</div>
-                </Col>
-                <Col span={12}>
-                  <div style={{ color: '#888', fontSize: 12, marginBottom: 4 }}>{t('col_location')}</div>
-                  <div style={{ fontWeight: 'bold', color: '#1a1a2e' }}><BankOutlined /> {qrDevice.room_name || '-'}</div>
-                </Col>
-                <Col span={12}>
-                  <div style={{ color: '#888', fontSize: 12, marginBottom: 4 }}>{t('col_user')}</div>
-                  <div style={{ fontWeight: 'bold', color: '#1a1a2e' }}><UserOutlined /> {qrDevice.owner_name || '-'}</div>
-                </Col>
-                {qrDevice.price && (
-                  <Col span={12}>
-                    <div style={{ color: '#888', fontSize: 12, marginBottom: 4 }}>{t('col_price') || 'Цена'}</div>
-                    <div style={{ fontWeight: 'bold', color: '#1a1a2e' }}>{qrDevice.price}</div>
-                  </Col>
-                )}
-                {qrDevice.details && (
-                  <Col span={24}>
-                    <div style={{ color: '#888', fontSize: 12, marginBottom: 4 }}>{t('label_details')}</div>
-                    <div style={{ color: '#555', background: '#f5f5f5', padding: '8px 12px', borderRadius: 8 }}>{qrDevice.details}</div>
-                  </Col>
-                )}
-              </Row>
-            </div>
-
-            {/* No back button - QR card is standalone */}
-          </Card>
-        </Content>
-      </Layout>
-    );
-  }
-
-  // --- RENDER IF NOT AUTHENTICATED ---
+  // ====================== LOGIN SCREEN ======================
   if (!isAuthenticated) {
     return (
-      <Layout style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-        <Content style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <Card style={{ width: 400, textAlign: 'center' }}>
-            <Typography.Title level={2}>{t('site_access')}</Typography.Title>
-            <Form form={loginForm} onFinish={handleGlobalLogin}>
-              <Form.Item name="username" rules={[{ required: true }]}>
-                <Input prefix={<UserOutlined />} placeholder={t('username')} size="large" />
-              </Form.Item>
-              <Form.Item name="password" rules={[{ required: true }]}>
-                <Input.Password prefix={<LockOutlined />} placeholder={t('password')} size="large" />
-              </Form.Item>
-              <Button type="primary" htmlType="submit" size="large" block>{t('login_system')}</Button>
-            </Form>
-          </Card>
-        </Content>
-      </Layout>
+      <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <Card style={{ width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(31, 47, 97, 0.15)', borderRadius: 20, border: 'none' }}>
+          <div style={{ marginBottom: 40, textAlign: 'center' }}>
+            <div style={{ width: 70, height: 70, background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', margin: '0 auto', fontSize: 32, marginBottom: 16 }}><LaptopOutlined /></div>
+            <Typography.Title level={2} style={{ marginBottom: 8, color: '#1f2f61', fontWeight: 700 }}>InnoTechnopark</Typography.Title>
+            <Typography.Text style={{ color: '#6b7280', fontSize: 14 }}>{t('site_access')}</Typography.Text>
+          </div>
+          <Form form={loginForm} layout="vertical" onFinish={handleGlobalLogin}>
+            <Form.Item name="username" rules={[{ required: true, message: t('username') + ' required' }]}><Input prefix={<UserOutlined />} placeholder={t('username')} size="large" style={{ borderRadius: 10, borderColor: '#e5e7eb' }} /></Form.Item>
+            <Form.Item name="password" rules={[{ required: true, message: t('password') + ' required' }]}><Input.Password prefix={<LockOutlined />} placeholder={t('password')} size="large" style={{ borderRadius: 10, borderColor: '#e5e7eb' }} /></Form.Item>
+            <Button type="primary" htmlType="submit" block size="large" style={{ borderRadius: 10, background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)', border: 'none', fontWeight: 600, height: 48 }}>{t('login_system')}</Button>
+          </Form>
+          <div style={{ marginTop: 24, paddingTop: 24, borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'center' }}><LanguageSwitcher currentLang={lang} onLangChange={setLang} /></div>
+        </Card>
+      </div>
     );
   }
 
-  // --- MAIN APP LAYOUT ---
+  // ====================== APP LAYOUT ======================
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      {/* HEADER */}
-      <Header className="gradient-header" style={{ padding: '0 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        {isMobile && <Button icon={<MenuOutlined />} onClick={() => setDrawerVisible(true)} style={{ marginRight: 16 }} />}
-        <Typography.Title level={3} style={{ margin: 0 }}>
-          {appMode === 'admin' ? t('admin_panel') : 'InnoTechnopark'}
-        </Typography.Title>
-        <Space>
-          <LanguageSwitcher currentLang={lang} onLangChange={setLang} />
-          {appMode === 'admin' && <Button icon={<ArrowLeftOutlined />} onClick={exitAdminMode}>{t('back_to_site')}</Button>}
-          {appMode === 'public' && <Button icon={<LockOutlined />} onClick={() => setIsAdminLoginModalOpen(true)}>{t('login_admin')}</Button>}
-          <Button icon={<LogoutOutlined />} onClick={handleGlobalLogout}>{t('logout')}</Button>
-        </Space>
-      </Header>
+    <Layout style={{ minHeight: '100vh', background: '#f8fafb' }}>
+      {appMode === 'admin' && !isMobile && (
+        <Sider theme="light" width={280} style={{ borderRight: '1px solid #e5e7eb', background: '#fff' }}>
+          <div style={{ padding: '24px 20px', fontSize: '20px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 12, color: '#1f2f61', borderBottom: '1px solid #e5e7eb' }}>
+            <div style={{ width: 40, height: 40, background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 18 }}><LaptopOutlined /></div>
+            {t('admin_panel')}
+          </div>
+          <Menu mode="inline" selectedKeys={[currentPage]} items={menuItems} onClick={(e) => { if (e.key === 'logout') setAppMode('public'); else setCurrentPage(e.key); }} style={{ border: 'none' }} />
+          <div style={{ padding: '20px' }}><LanguageSwitcher currentLang={lang} onLangChange={setLang} /></div>
+        </Sider>
+      )}
 
       <Layout>
-        {/* SIDEBAR */}
-        {!isMobile ? (
-          <Sider width={200} style={{ background: '#fff' }}>
-            <Menu mode="inline" selectedKeys={[activePage]} style={{ height: '100%', borderRight: 0 }} onClick={(e) => setActivePage(e.key)}>
-              <Menu.Item key="dashboard" icon={<AppstoreOutlined />}>{t('dashboard')}</Menu.Item>
-              {appMode === 'admin' && <Menu.Item key="users" icon={<UserOutlined />}>{t('users')}</Menu.Item>}
-              {appMode === 'admin' && <Menu.Item key="settings" icon={<BankOutlined />}>{t('settings')}</Menu.Item>}
-            </Menu>
-          </Sider>
-        ) : (
-          <Drawer title="Menu" placement="left" onClose={() => setDrawerVisible(false)} open={drawerVisible}>
-            <Menu mode="inline" selectedKeys={[activePage]} onClick={(e) => { setActivePage(e.key); setDrawerVisible(false); }}>
-              <Menu.Item key="dashboard" icon={<AppstoreOutlined />}>{t('dashboard')}</Menu.Item>
-              {appMode === 'admin' && <Menu.Item key="users" icon={<UserOutlined />}>{t('users')}</Menu.Item>}
-              {appMode === 'admin' && <Menu.Item key="settings" icon={<BankOutlined />}>{t('settings')}</Menu.Item>}
-            </Menu>
-          </Drawer>
-        )}
+        <Header style={{ background: '#fff', padding: isMobile ? '0 16px' : '0 60px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e5e7eb', height: isMobile ? 64 : 72, boxShadow: '0 2px 16px rgba(31, 47, 97, 0.08)' }}>
+          {appMode === 'admin' && isMobile && (
+            <Button type="text" icon={<MenuOutlined />} onClick={() => setDrawerVisible(true)} style={{ fontSize: 20 }} />
+          )}
 
-        {/* MAIN CONTENT */}
-        <Layout style={{ padding: '24px' }}>
-          <Content style={{ background: '#fff', padding: 24, borderRadius: 8 }}>
-            {activePage === 'dashboard' && (
+          {appMode === 'public' ? (
+            <div className="mobile-header-logo" style={{ fontSize: isMobile ? '16px' : '22px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, color: '#1f2f61' }}>
+              <div style={{ width: isMobile ? 32 : 40, height: isMobile ? 32 : 40, background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}><LaptopOutlined /></div>
+              {!isMobile && 'InnoTechnopark'} {!isMobile && <span style={{ fontSize: 12, fontWeight: 500, color: '#9ca3af', marginLeft: 12, backgroundColor: '#f3f4f6', padding: '4px 12px', borderRadius: 20 }}>{t('public_portal')}</span>}
+            </div>
+          ) : (
+            <Input prefix={<SearchOutlined style={{ color: '#9ca3af' }} />} placeholder={t('search_placeholder')} style={{ width: 320, borderRadius: 10, background: '#f3f4f6', border: '1px solid #e5e7eb', padding: '10px 16px' }} value={searchText} onChange={e => setSearchText(e.target.value)} />
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12 }}>
+            {appMode === 'public' ? (
               <>
-                <Row gutter={16} style={{ marginBottom: 24 }} className="fade-in">
-                  <Col xs={24} sm={12} md={6}>
-                    <Card className="stats-card">
-                      <Statistic
-                        title={<span style={{ color: '#0369a1', fontWeight: 600 }}>{t('total_devices')}</span>}
-                        value={stats.total}
-                        prefix={<div className="icon-container blue"><LaptopOutlined /></div>}
-                        valueStyle={{ color: '#0369a1', fontSize: 32, fontWeight: 700 }}
-                      />
-                    </Card>
-                  </Col>
-                  <Col xs={24} sm={12} md={6}>
-                    <Card className="stats-card">
-                      <Statistic
-                        title={<span style={{ color: '#15803d', fontWeight: 600 }}>{t('assigned')}</span>}
-                        value={stats.assigned}
-                        prefix={<div className="icon-container green"><UserOutlined /></div>}
-                        valueStyle={{ color: '#15803d', fontSize: 32, fontWeight: 700 }}
-                      />
-                    </Card>
-                  </Col>
-                  <Col xs={24} sm={12} md={6}>
-                    <Card className="stats-card">
-                      <Statistic
-                        title={<span style={{ color: '#991b1b', fontWeight: 600 }}>{t('broken')}</span>}
-                        value={stats.broken}
-                        prefix={<div className="icon-container red"><LaptopOutlined /></div>}
-                        valueStyle={{ color: '#991b1b', fontSize: 32, fontWeight: 700 }}
-                      />
-                    </Card>
-                  </Col>
-                  <Col xs={24} sm={12} md={6}>
-                    <Card className="stats-card">
-                      <Statistic
-                        title={<span style={{ color: '#be185d', fontWeight: 600 }}>{t('rooms')}</span>}
-                        value={stats.rooms}
-                        prefix={<div className="icon-container purple"><BankOutlined /></div>}
-                        valueStyle={{ color: '#be185d', fontSize: 32, fontWeight: 700 }}
-                      />
-                    </Card>
-                  </Col>
-                </Row>
-
-                <Space style={{ marginBottom: 16, flexWrap: 'wrap' }}>
-                  {appMode === 'admin' && <Button type="primary" icon={<PlusOutlined />} onClick={openCreateProductModal}>{t('add_product')}</Button>}
-                  {appMode === 'admin' && <Button icon={<DownloadOutlined />} onClick={handleExport}>Export Excel</Button>}
-                  {appMode === 'admin' && <Button icon={<UploadOutlined />} onClick={() => setIsImportModalOpen(true)}>Import Excel</Button>}
-                  {appMode === 'admin' && <Button icon={<PrinterOutlined />} disabled={selectedDevices.length === 0} onClick={handlePrintQR}>Печать QR ({selectedDevices.length})</Button>}
-                </Space>
-
-                <Space style={{ marginBottom: 16, flexWrap: 'wrap' }}>
-                  <Input.Search placeholder={t('search_placeholder')} value={searchText} onChange={(e) => setSearchText(e.target.value)} style={{ width: 250 }} />
-                  <Select placeholder={t('col_location')} value={filterRoom} onChange={setFilterRoom} allowClear style={{ width: 150 }}>
-                    {rooms.map(r => <Option key={r.id} value={r.id}>{r.room_name}</Option>)}
-                  </Select>
-                  <Select placeholder={t('label_cat')} value={filterCategory} onChange={setFilterCategory} allowClear style={{ width: 150 }}>
-                    {categories.map(c => <Option key={c.id} value={c.name}>{c.name}</Option>)}
-                  </Select>
-                  <Select placeholder={t('label_status')} value={filterStatus} onChange={setFilterStatus} allowClear style={{ width: 150 }}>
-                    <Option value="working">{getStatusLabel('working', lang)}</Option>
-                    <Option value="in_stock">{getStatusLabel('in_stock', lang)}</Option>
-                    <Option value="repair">{getStatusLabel('repair', lang)}</Option>
-                    <Option value="broken">{getStatusLabel('broken', lang)}</Option>
-                  </Select>
-                  <Button icon={<FilterOutlined />} onClick={() => { setSearchText(''); setFilterRoom(null); setFilterCategory(null); setFilterStatus(null); }}>{t('reset_filter')}</Button>
-                </Space>
-
-
-                <div className="modern-table">
-                  <Table
-                    columns={adminColumns}
-                    dataSource={paginatedDevices}
-                    loading={loading}
-                    pagination={{
-                      current: currentPage,
-                      pageSize: pageSize,
-                      total: filteredDevices.length,
-                      showSizeChanger: true,
-                      onChange: (page, size) => { setCurrentPage(page); setPageSize(size); },
-                      showTotal: (total, range) => `${range[0]}-${range[1]} of ${total}`
-                    }}
-                    rowSelection={appMode === 'admin' ? {
-                      selectedRowKeys: selectedDevices,
-                      onChange: (keys) => setSelectedDevices(keys)
-                    } : undefined}
-                  />
-                </div>
+                {!isMobile && <LanguageSwitcher currentLang={lang} onLangChange={setLang} />}
+                <Button className={isMobile ? 'mobile-hide-text' : ''} type="default" icon={<LockOutlined />} onClick={() => setIsAdminLoginModalOpen(true)} style={{ borderRadius: 8, borderColor: '#e5e7eb', color: '#374151' }}>{!isMobile && t('login_admin')}</Button>
               </>
+            ) : (
+              <Button className={isMobile ? 'mobile-hide-text' : ''} type="default" icon={<ArrowLeftOutlined />} onClick={() => setAppMode('public')} style={{ borderRadius: 8, borderColor: '#e5e7eb' }}>{!isMobile && t('back_to_site')}</Button>
+            )}
+            <Tooltip title="Exit System"><Button type="text" danger icon={<PoweroffOutlined />} onClick={handleGlobalLogout} style={{ color: '#ef4444', borderRadius: 8 }} /></Tooltip>
+          </div>
+        </Header>
+
+        <Content style={{ padding: isMobile ? '16px 12px' : '40px 60px' }}>
+          <div style={{ margin: '0 auto', maxWidth: appMode === 'public' ? undefined : 1600 }}>
+            {appMode === 'public' && (
+              <Row gutter={isMobile ? 8 : 16} style={{ marginBottom: isMobile ? 16 : 24 }}>
+                <Col xs={12} sm={12} md={6}>
+                  <Card variant="borderless">
+                    <Statistic 
+                      title={<span style={{ color: '#0369a1', fontWeight: 600 }}>{t('total_devices')}</span>} 
+                      value={allDevices?.length || 0} 
+                      prefix={<LaptopOutlined style={{ color: '#0284c7' }} />} 
+                      valueStyle={{ color: '#0369a1', fontSize: isMobile ? 20 : 32, fontWeight: 700 }} 
+                    />
+                  </Card>
+                </Col>
+                <Col xs={12} sm={12} md={6}>
+                  <Card variant="borderless">
+                    <Statistic 
+                      title={<span style={{ color: '#15803d', fontWeight: 600 }}>{t('assigned')}</span>} 
+                      value={(allDevices || []).filter(d => d.owner_name).length} 
+                      prefix={<UserOutlined style={{ color: '#22c55e' }} />} 
+                      valueStyle={{ color: '#15803d', fontSize: isMobile ? 20 : 32, fontWeight: 700 }} 
+                    />
+                  </Card>
+                </Col>
+                <Col xs={12} sm={12} md={6}>
+                  <Card variant="borderless">
+                    <Statistic 
+                      title={<span style={{ color: '#991b1b', fontWeight: 600 }}>{t('broken')}</span>} 
+                      value={(allDevices || []).filter(d => d.status === 'broken').length} 
+                      prefix={<SettingTwoTone style={{ color: '#dc2626' }} />} 
+                      valueStyle={{ color: '#991b1b', fontSize: isMobile ? 20 : 32, fontWeight: 700 }} 
+                    />
+                  </Card>
+                </Col>
+                <Col xs={12} sm={12} md={6}>
+                  <Card variant="borderless">
+                    <Statistic 
+                      title={<span style={{ color: '#be185d', fontWeight: 600 }}>{t('rooms')}</span>} 
+                      value={rooms?.length || 0} 
+                      prefix={<BankOutlined style={{ color: '#ec4899' }} />} 
+                      valueStyle={{ color: '#be185d', fontSize: isMobile ? 20 : 32, fontWeight: 700 }} 
+                    />
+                  </Card>
+                </Col>
+              </Row>
             )}
 
-            {activePage === 'users' && appMode === 'admin' && (
-              <>
-                <Button type="primary" icon={<PlusOutlined />} onClick={openCreateEmployeeModal} style={{ marginBottom: 16 }}>{t('add_employee')}</Button>
-                <Table
-                  dataSource={employees}
-                  columns={[
-                    { title: t('col_full_name'), dataIndex: 'full_name' },
-                    { title: t('col_position'), dataIndex: 'position' },
-                    {
-                      title: t('col_action'),
-                      render: (_, rec) => (
-                        <Space>
-                          <Button size="small" onClick={() => openEditEmployeeModal(rec)}>Edit</Button>
-                          <Popconfirm title={t('delete_confirm')} onConfirm={() => crud.deleteEmployee(rec.id)}>
-                            <Button size="small" danger>Delete</Button>
-                          </Popconfirm>
-                        </Space>
-                      )
-                    }
-                  ]}
-                />
-              </>
-            )}
+            <div style={{ background: '#fff', padding: 32, borderRadius: 16, minHeight: '80vh', boxShadow: '0 4px 24px rgba(31, 47, 97, 0.08)', border: '1px solid #e5e7eb' }}>
+              {appMode === 'admin' && currentPage === 'references' ? (
+                <Tabs defaultActiveKey="1" items={[
+                  { key: '1', label: <span><TeamOutlined /> Сотрудники</span>, children: (<><div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}><Button type="primary" icon={<PlusOutlined />} onClick={openCreateEmployeeModal}>{t('add_employee')}</Button></div><Table columns={empColumns} dataSource={filteredEmployees} rowKey="id" /></>) },
+                  { key: '2', label: <span><BankOutlined /> Комнаты</span>, children: (<><div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}><Button type="primary" icon={<PlusOutlined />} onClick={openCreateRoomModal}>{t('add_room')}</Button></div><Table columns={roomColumns} dataSource={rooms} rowKey="id" /></>) },
+                  { key: '3', label: <span><AppstoreOutlined /> Категории</span>, children: (<><div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}><Button type="primary" icon={<PlusOutlined />} onClick={openCreateCategoryModal}>Добавить Категорию</Button></div><Table columns={categoryColumns} dataSource={categories} rowKey="id" /></>) }
+                ]} />
+              ) : (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                    {appMode === 'public' && <Input prefix={<SearchOutlined style={{ color: '#9ca3af' }} />} placeholder={t('search_placeholder')} style={{ width: 300, borderRadius: 8 }} value={searchText} onChange={e => setSearchText(e.target.value)} />}
+                    <Space wrap>
+                      {appMode === 'admin' && (
+                        <>
+                          <Button icon={<DownloadOutlined />} onClick={handleExport}>Экспорт (Excel)</Button>
+                          <Button icon={<UploadOutlined />} onClick={() => setIsImportModalOpen(true)}>Импорт (Excel)</Button>
+                          <Button icon={<PrinterOutlined />} disabled={selectedDevices.length === 0} onClick={handlePrintQR}>Печать QR ({selectedDevices.length})</Button>
+                        </>
+                      )}
+                      <Select placeholder={t('rooms')} style={{ width: 140 }} allowClear value={filterRoom} onChange={setFilterRoom}>{rooms.map(r => <Option key={r.id} value={r.id}>{r.room_name}</Option>)}</Select>
+                      <Select placeholder={t('label_cat')} style={{ width: 140 }} allowClear value={filterCategory} onChange={setFilterCategory}>{categories.map(c => <Option key={c.id} value={c.name}>{c.name}</Option>)}</Select>
+                      <Select placeholder={t('label_status')} style={{ width: 140 }} allowClear value={filterStatus} onChange={setFilterStatus}>
+                        <Option value="working">{lang === 'uz' ? 'Ishlayapti' : 'В работе'}</Option>
+                        <Option value="in_stock">{lang === 'uz' ? 'Omborda' : 'На складе'}</Option>
+                        <Option value="repair">{lang === 'uz' ? 'Ta\'mirda' : 'В ремонте'}</Option>
+                        <Option value="broken">{lang === 'uz' ? 'Buzilgan' : 'Сломано'}</Option>
+                        <Option value="decommissioned">{lang === 'uz' ? 'Hisobdan chiqarilgan' : 'Списано'}</Option>
+                      </Select>
+                      <Button type="text" danger onClick={resetFilters}>{t('reset_filter')}</Button>
+                    </Space>
+                    {appMode === 'admin' && <Button type="primary" icon={<PlusOutlined />} onClick={openCreateProductModal}>{t('add_product')}</Button>}
+                  </div>
+                  <div className="mobile-table-wrapper" style={{ overflowX: 'auto' }}>
+                    <Table
+                      columns={appMode === 'admin' ? adminColumns : publicColumns}
+                      dataSource={filteredDevices}
+                      loading={loading}
+                      rowSelection={appMode === 'admin' ? {
+                         selectedRowKeys: selectedDevices,
+                         onChange: (keys) => setSelectedDevices(keys)
+                      } : undefined}
+                      pagination={{
+                        current: currentPage,
+                        pageSize: pageSize,
+                        showSizeChanger: true,
+                        pageSizeOptions: ['10', '20', '50', '100'],
+                        showTotal: (total, range) => `${range[0]}-${range[1]} из ${total}`,
+                        onChange: (page, size) => {
+                          setCurrentPage(page);
+                          setPageSize(size);
+                        },
+                        onShowSizeChange: (current, size) => {
+                          setCurrentPage(1);
+                          setPageSize(size);
+                        }
+                      }}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </Content>
 
-            {activePage === 'settings' && appMode === 'admin' && (
-              <Space direction="vertical" style={{ width: '100%' }} size="large">
-                {/* ROOMS SECTION */}
-                <div>
-                  <Button type="primary" icon={<PlusOutlined />} onClick={openCreateRoomModal} style={{ marginBottom: 16 }}>{t('add_room')}</Button>
-                  <Table
-                    dataSource={rooms}
-                    rowKey="id"
-                    pagination={false}
-                    columns={[
-                      { title: 'ID', dataIndex: 'id', width: 60 },
-                      { title: t('col_location'), dataIndex: 'name' },
-                      {
-                        title: t('col_action'),
-                        width: 120,
-                        render: (_, rec) => (
-                          <Space>
-                            <Button size="small" onClick={() => openEditRoomModal(rec)}>Edit</Button>
-                            <Popconfirm title={t('delete_confirm')} onConfirm={() => crud.deleteRoom(rec.id)}>
-                              <Button size="small" danger>Delete</Button>
-                            </Popconfirm>
-                          </Space>
-                        )
-                      }
-                    ]}
-                  />
-                </div>
+        <Modal title={t('modal_admin_access')} open={isAdminLoginModalOpen} onCancel={() => setIsAdminLoginModalOpen(false)} footer={null} width={300}>
+          <Input.Password placeholder={t('enter_pass')} value={adminPassword} onChange={e => setAdminPassword(e.target.value)} onPressEnter={handleAdminLogin} />
+          <Button type="primary" block style={{ marginTop: 15 }} onClick={handleAdminLogin}>{t('login_btn')}</Button>
+        </Modal>
 
-                {/* CATEGORIES SECTION */}
-                <div>
-                  <Button type="primary" icon={<PlusOutlined />} onClick={openCreateCategoryModal} style={{ marginBottom: 16 }}>Добавить категорию</Button>
-                  <Table
-                    dataSource={categories}
-                    rowKey="id"
-                    pagination={false}
-                    columns={[
-                      { title: 'ID', dataIndex: 'id', width: 60 },
-                      { title: t('label_cat'), dataIndex: 'name' },
-                      {
-                        title: t('col_action'),
-                        width: 120,
-                        render: (_, rec) => (
-                          <Space>
-                            <Button size="small" onClick={() => openEditCategoryModal(rec)}>Edit</Button>
-                            <Popconfirm title={t('delete_confirm')} onConfirm={() => crud.deleteCategory(rec.id)}>
-                              <Button size="small" danger>Delete</Button>
-                            </Popconfirm>
-                          </Space>
-                        )
-                      }
-                    ]}
-                  />
-                </div>
-              </Space>
-            )}
-          </Content>
-        </Layout>
+        {/* IMPORT MODAL */}
+        <Modal title="Импорт из Excel" open={isImportModalOpen} onCancel={() => setIsImportModalOpen(false)} footer={null}>
+          <p>Загрузите файл .xlsx. Колонки: Название, Категория, Прайс, Инв. номер, Статус, Комната.</p>
+          <Upload.Dragger customRequest={handleImport} showUploadList={false}>
+            <p className="ant-upload-drag-icon"><UploadOutlined /></p>
+            <p className="ant-upload-text">Нажмите или перетащите файл сюда</p>
+          </Upload.Dragger>
+        </Modal>
+
+        <SharedModals
+          t={t} isProductModalOpen={isProductModalOpen} setIsProductModalOpen={setIsProductModalOpen}
+          productForm={productForm} handleSaveProduct={handleSaveProduct} rooms={rooms} categories={categories} employees={employees}
+          editingDevice={editingDevice} handleDeleteDevice={handleDeleteDevice}
+          isEmployeeModalOpen={isEmployeeModalOpen} setIsEmployeeModalOpen={setIsEmployeeModalOpen}
+          employeeForm={employeeForm} handleSaveEmployee={handleSaveEmployee} editingEmployee={editingEmployee}
+          isRoomModalOpen={isRoomModalOpen} setIsRoomModalOpen={setIsRoomModalOpen} roomForm={roomForm} handleSaveRoom={handleSaveRoom} editingRoom={editingRoom}
+          isCategoryModalOpen={isCategoryModalOpen} setIsCategoryModalOpen={setIsCategoryModalOpen} categoryForm={categoryForm} handleSaveCategory={handleSaveCategory} editingCategory={editingCategory}
+          isViewModalOpen={isViewModalOpen} setIsViewModalOpen={setIsViewModalOpen} viewDevice={viewDevice}
+          downloadQRCode={downloadQRCode}
+          lang={lang}
+        />
+
+        <Modal title={selectedUser?.full_name + "'s Assets"} open={isUserAssetsModalOpen} onCancel={() => setIsUserAssetsModalOpen(false)} footer={null}>
+          {selectedUser && selectedUser.devices_list?.length > 0 ? <List dataSource={selectedUser.devices_list} renderItem={item => (<List.Item><Tag color="blue">Asset</Tag> {item}</List.Item>)} /> : <Empty description="No assets" />}
+        </Modal>
+
+        {/* Mobile Drawer */}
+        <Drawer
+          title={<div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><LaptopOutlined /> {t('admin_panel')}</div>}
+          placement="left"
+          onClose={() => setDrawerVisible(false)}
+          open={drawerVisible}
+          width="280px"
+        >
+          <Menu mode="inline" selectedKeys={[activePage]} items={menuItems} onClick={(e) => { if (e.key === 'logout') { setAppMode('public'); setDrawerVisible(false); } else { setActivePage(e.key); setDrawerVisible(false); } }} style={{ border: 'none' }} />
+          <div style={{ padding: '20px' }}><LanguageSwitcher currentLang={lang} onLangChange={setLang} /></div>
+        </Drawer>
       </Layout>
-
-      {/* MODALS */}
-      <SharedModals
-        t={t}
-        lang={lang}
-        isProductModalOpen={isProductModalOpen}
-        setIsProductModalOpen={setIsProductModalOpen}
-        productForm={productForm}
-        handleSaveProduct={handleSaveProduct}
-        rooms={rooms}
-        categories={categories}
-        employees={employees}
-        editingDevice={editingDevice}
-        handleDeleteDevice={crud.deleteDevice}
-        isEmployeeModalOpen={isEmployeeModalOpen}
-        setIsEmployeeModalOpen={setIsEmployeeModalOpen}
-        employeeForm={employeeForm}
-        handleSaveEmployee={handleSaveEmployee}
-        editingEmployee={editingEmployee}
-        isRoomModalOpen={isRoomModalOpen}
-        setIsRoomModalOpen={setIsRoomModalOpen}
-        roomForm={roomForm}
-        handleSaveRoom={handleSaveRoom}
-        editingRoom={editingRoom}
-        isCategoryModalOpen={isCategoryModalOpen}
-        setIsCategoryModalOpen={setIsCategoryModalOpen}
-        categoryForm={categoryForm}
-        handleSaveCategory={handleSaveCategory}
-        editingCategory={editingCategory}
-        isViewModalOpen={isViewModalOpen}
-        setIsViewModalOpen={setIsViewModalOpen}
-        viewDevice={viewDevice}
-        downloadQRCode={downloadQRCode}
-      />
-
-      {/* ADMIN LOGIN MODAL */}
-      <Modal title={t('modal_admin_access')} open={isAdminLoginModalOpen} onCancel={() => setIsAdminLoginModalOpen(false)} footer={null}>
-        <Input.Password placeholder={t('enter_pass')} value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} onPressEnter={handleAdminLogin} size="large" />
-        <Button type="primary" onClick={handleAdminLogin} block style={{ marginTop: 16 }} size="large">{t('login_btn')}</Button>
-      </Modal>
-
-      {/* IMPORT MODAL */}
-      <Modal title="Import Excel" open={isImportModalOpen} onCancel={() => setIsImportModalOpen(false)} footer={null}>
-        <Upload customRequest={handleImport} maxCount={1} accept=".xlsx">
-          <Button icon={<UploadOutlined />}>Select Excel File</Button>
-        </Upload>
-      </Modal>
     </Layout>
   );
 }
+
+const SharedModals = ({
+  t, isProductModalOpen, setIsProductModalOpen, productForm, handleSaveProduct, rooms, categories, employees, editingDevice, handleDeleteDevice,
+  isEmployeeModalOpen, setIsEmployeeModalOpen, employeeForm, handleSaveEmployee, editingEmployee,
+  isRoomModalOpen, setIsRoomModalOpen, roomForm, handleSaveRoom, editingRoom,
+  isCategoryModalOpen, setIsCategoryModalOpen, categoryForm, handleSaveCategory, editingCategory,
+  isViewModalOpen, setIsViewModalOpen, viewDevice, downloadQRCode, lang 
+}) => (
+  <>
+    <Modal title={editingDevice ? t('modal_prod_title_edit') : t('modal_prod_title_add')} open={isProductModalOpen} onCancel={() => setIsProductModalOpen(false)} footer={null} width={700}>
+      <Form form={productForm} layout="vertical" onFinish={handleSaveProduct}>
+        <Row gutter={16}>
+          <Col span={12}><Form.Item name="name" label={<b>{t('label_name')}</b>} rules={[{ required: true }]}><Input /></Form.Item></Col>
+          <Col span={12}><Form.Item name="type" label={<b>{t('label_cat')}</b>} rules={[{ required: true }]}><Select>{categories && categories.map(c => <Option key={c.id} value={c.name}>{c.name}</Option>)}</Select></Form.Item></Col>
+        </Row>
+        <Row gutter={16}>
+          <Col span={12}><Form.Item name="inventory_number" label={<b>{t('col_inv')}</b>}><Input /></Form.Item></Col>
+          <Col span={12}><Form.Item name="price" label={<b>Прайс</b>}><Input placeholder="Например: 1200$" /></Form.Item></Col>
+        </Row>
+        <Row gutter={16}>
+          <Col span={12}><Form.Item name="room_id" label={<b>{t('col_location')}</b>} rules={[{ required: true }]}><Select>{rooms.map(r => <Option key={r.id} value={r.id}>{r.room_name}</Option>)}</Select></Form.Item></Col>
+          <Col span={12}>
+            <Form.Item name="status" label={<b>{t('label_status')}</b>}>
+              <Select>
+                <Option value="working">{lang === 'uz' ? 'Ishlayapti' : 'В работе'}</Option>
+                <Option value="in_stock">{lang === 'uz' ? 'Omborda' : 'На складе'}</Option>
+                <Option value="repair">{lang === 'uz' ? 'Ta\'mirda' : 'В ремонте'}</Option>
+                <Option value="broken">{lang === 'uz' ? 'Buzilgan' : 'Сломано'}</Option>
+                <Option value="decommissioned">{lang === 'uz' ? 'Hisobdan chiqarilgan' : 'Списано'}</Option>
+              </Select>
+            </Form.Item>
+          </Col>
+        </Row>
+        <Form.Item name="employee_id" label={<b>{t('label_assign')}</b>}><Select placeholder="Select..." allowClear showSearch optionFilterProp="children">{employees.map(e => <Option key={e.id} value={e.id}>{e.full_name}</Option>)}</Select></Form.Item>
+        <Form.Item name="details" label={<b>{t('label_details')}</b>}><TextArea rows={3} /></Form.Item>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20 }}>
+          <Button type="primary" htmlType="submit">{t('save_btn')}</Button>
+          {editingDevice && <Popconfirm title={t('delete_confirm')} onConfirm={() => handleDeleteDevice(editingDevice.id)}><Button danger>{t('delete_confirm')}</Button></Popconfirm>}
+        </div>
+      </Form>
+    </Modal>
+
+    <Modal title={editingEmployee ? "Редактировать сотрудника" : t('modal_reg_self')} open={isEmployeeModalOpen} onCancel={() => setIsEmployeeModalOpen(false)} footer={null}>
+      <Form form={employeeForm} layout="vertical" onFinish={handleSaveEmployee}>
+        <Form.Item name="full_name" label={<b>{t('col_full_name')}</b>} rules={[{ required: true }]}><Input placeholder={t('ph_name')} /></Form.Item>
+        <Form.Item name="position" label={<b>{t('label_position')}</b>} rules={[{ required: true }]}><Input placeholder={t('ph_pos')} /></Form.Item>
+        <Button type="primary" htmlType="submit" block size="large">{t('create_btn')}</Button>
+      </Form>
+    </Modal>
+
+    <Modal title={editingRoom ? "Редактировать комнату" : t('modal_room_title')} open={isRoomModalOpen} onCancel={() => setIsRoomModalOpen(false)} footer={null}>
+      <Form form={roomForm} layout="vertical" onFinish={handleSaveRoom}>
+        <Form.Item name="name" label={<b>{t('label_name')}</b>} rules={[{ required: true }]}><Input /></Form.Item>
+        <Button type="primary" htmlType="submit" block>{t('create_btn')}</Button>
+      </Form>
+    </Modal>
+
+    <Modal title={editingCategory ? "Редактировать категорию" : "Добавить Категорию"} open={isCategoryModalOpen} onCancel={() => setIsCategoryModalOpen(false)} footer={null}>
+      <Form form={categoryForm} layout="vertical" onFinish={handleSaveCategory}>
+        <Form.Item name="name" label={<b>Название категории</b>} rules={[{ required: true }]}><Input placeholder="Например: Ноутбуки" /></Form.Item>
+        <Button type="primary" htmlType="submit" block>{t('create_btn')}</Button>
+      </Form>
+    </Modal>
+
+    <Modal title="Информация об устройстве" open={isViewModalOpen} onCancel={() => setIsViewModalOpen(false)} footer={null} width={400}>
+      {viewDevice && (
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ background: '#f0f2f5', padding: 20, borderRadius: 12, marginBottom: 20, display: 'inline-block' }}>
+            <QRCodeCanvas
+              id="qr-gen"
+              value={`${window.location.origin}/?qr_id=${viewDevice.id}`}
+              size={150}
+            />
+            <div style={{ marginTop: 10, fontWeight: 'bold', color: '#555' }}>{viewDevice.inventory_number}</div>
+          </div>
+          <div style={{ marginBottom: 20 }}>
+            <Button type="dashed" icon={<DownloadOutlined />} onClick={downloadQRCode}>Скачать QR</Button>
+          </div>
+
+          <Descriptions bordered column={1} size="small" style={{ textAlign: 'left' }}>
+            <Descriptions.Item label={t('col_product')}>{viewDevice.name}</Descriptions.Item>
+            <Descriptions.Item label={t('label_cat')}>{viewDevice.type}</Descriptions.Item>
+            <Descriptions.Item label="Прайс">{viewDevice.price}</Descriptions.Item>
+            <Descriptions.Item label={t('col_location')}>{viewDevice.room_name}</Descriptions.Item>
+            <Descriptions.Item label={t('col_user')}>{viewDevice.owner_name || '-'}</Descriptions.Item>
+            <Descriptions.Item label={t('col_status')}><Tag>{viewDevice.status}</Tag></Descriptions.Item>
+          </Descriptions>
+        </div>
+      )}
+    </Modal>
+  </>
+);
 
 export default App;
