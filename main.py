@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://192.168.5.122:84")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://inver.uz")
 
 # Создаем таблицы
 models.Base.metadata.create_all(bind=engine)
@@ -32,7 +32,8 @@ app = FastAPI()
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    FRONTEND_URL,
+    "http://inver.uz",
+    "https://inver.uz",
     "*"
 ]
 
