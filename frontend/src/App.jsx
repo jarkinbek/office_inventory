@@ -3,16 +3,16 @@ import axios from 'axios';
 import { QRCodeCanvas } from 'qrcode.react';
 import {
   Layout, Menu, Button, Table, Tag, Input, Select, Modal, Form,
-  message, Row, Col, Typography, Space, Popconfirm, List, Empty, Card, Statistic, Descriptions, Tooltip, Tabs, Upload, Drawer
+  message, Row, Col, Typography, Space, Popconfirm, List, Empty, Card, Statistic, Descriptions, Tooltip, Tabs, Upload, Drawer, Spin
 } from 'antd';
 import {
   AppstoreOutlined, UserOutlined,
   LogoutOutlined, PlusOutlined, SearchOutlined,
   DeleteOutlined, EditOutlined, BankOutlined, EyeOutlined,
   LockOutlined, ArrowLeftOutlined, LaptopOutlined, SettingTwoTone, PoweroffOutlined,
-  TeamOutlined, BookOutlined, DownloadOutlined, UploadOutlined, MenuOutlined, PrinterOutlined
+  TeamOutlined, BookOutlined, DownloadOutlined, UploadOutlined, MenuOutlined, PrinterOutlined,
+  MenuUnfoldOutlined, MenuFoldOutlined
 } from '@ant-design/icons';
-
 import { LanguageSwitcher } from './components/LanguageSwitcher';
 import { translations } from './utils/translations';
 import './responsive.css';
@@ -25,6 +25,11 @@ const { TextArea } = Input;
 const API_URL = '/api';
 
 function App() {
+  // QR param check
+  const params = new URLSearchParams(window.location.search);
+  const qrId = params.get('qr_id');
+  const isQrMode = !!qrId;
+
   const [lang, setLang] = useState('ru');
   const t = (key) => translations[lang][key] || key;
 
@@ -35,8 +40,6 @@ function App() {
 
   const [loginForm] = Form.useForm();
   const [appMode, setAppMode] = useState('public');
-
-  // ✅ ВАЖНО: активная страница меню отдельно от пагинации таблицы
   const [activePage, setActivePage] = useState('dashboard');
 
   // --- DATA STATE ---
@@ -57,11 +60,12 @@ function App() {
   const [filterStatus, setFilterStatus] = useState(null);
   const [selectedDevices, setSelectedDevices] = useState([]);
 
-  // MOBILE STATE
+  // MOBILE & LAYOUT STATE
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const [collapsed, setCollapsed] = useState(true); 
 
-  // ✅ ПАГИНАЦИЯ ТАБЛИЦЫ (отдельно!)
+  // ПАГИНАЦИЯ
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -71,7 +75,7 @@ function App() {
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
   const [isUserAssetsModalOpen, setIsUserAssetsModalOpen] = useState(false);
-  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(isQrMode);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // States for Editing
@@ -96,7 +100,6 @@ function App() {
       localStorage.setItem('site_auth', 'true');
       setIsAuthenticated(true);
       message.success(t('welcome_user'));
-      fetchData();
     } else {
       message.error(t('wrong_pass'));
     }
@@ -126,7 +129,6 @@ function App() {
     setLoading(true);
     try {
       const res = await axios.get(`${API_URL}/report`);
-
       const roomsData = res.data.rooms || [];
       const employeesData = res.data.employees || [];
       const categoriesData = res.data.categories || [];
@@ -152,15 +154,11 @@ function App() {
       }
       setAllDevices(devices);
 
-      // QR param
-      const params = new URLSearchParams(window.location.search);
-      const qrId = params.get('qr_id');
       if (qrId) {
         const targetDevice = devices.find((d) => d.id === parseInt(qrId));
         if (targetDevice) {
           setViewDevice(targetDevice);
           setIsViewModalOpen(true);
-          window.history.replaceState({}, document.title, window.location.pathname);
         }
       }
     } catch (e) {
@@ -171,22 +169,20 @@ function App() {
   };
 
   useEffect(() => {
-    if (isAuthenticated) fetchData();
+    if (isAuthenticated || isQrMode) fetchData();
   }, [isAuthenticated]);
 
-  // Mobile detection
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // ✅ Сброс страницы при фильтрации (это правильно)
   useEffect(() => {
     setCurrentPage(1);
   }, [searchText, filterRoom, filterCategory, filterStatus]);
 
-  // --- ACTIONS (EXPORT / IMPORT / QR) ---
+  // --- ACTIONS ---
   const handleExport = () => {
     window.open(`${API_URL}/export_excel?lang=${lang}`, '_blank');
   };
@@ -389,14 +385,12 @@ function App() {
     const matchesSearch =
       String(d.id).includes(text) ||
       (d.name || "").toLowerCase().includes(text) ||
-      (d.price && String(d.price).toLowerCase().includes(text)) ||
+      (d.price && String(d.price).toLowerCase().includes(text) ||
       (d.inventory_number && String(d.inventory_number).toLowerCase().includes(text)) ||
-      (d.owner_name && String(d.owner_name).toLowerCase().includes(text));
-
+      (d.owner_name && String(d.owner_name).toLowerCase().includes(text)));
     const matchesRoom = filterRoom ? d.room_id === filterRoom : true;
     const matchesCategory = filterCategory ? d.type === filterCategory : true;
     const matchesStatus = filterStatus ? d.status === filterStatus : true;
-
     return matchesSearch && matchesRoom && matchesCategory && matchesStatus;
   });
 
@@ -412,14 +406,11 @@ function App() {
     setCurrentPage(1);
   };
 
-  // ✅ FIX: безопасные значения пагинации + slice (иначе antd может давать NaN range)
   const totalFiltered = filteredDevices.length;
   const safeCurrent = Number.isFinite(+currentPage) && +currentPage >= 1 ? +currentPage : 1;
   const safePageSize = Number.isFinite(+pageSize) && +pageSize >= 1 ? +pageSize : 10;
-
   const startIndex = (safeCurrent - 1) * safePageSize;
   const endIndex = startIndex + safePageSize;
-
   const pagedDevices = filteredDevices.slice(startIndex, endIndex);
 
   // --- HELPERS ---
@@ -456,22 +447,41 @@ function App() {
   const openUserAssets = (user) => { setSelectedUser(user); setIsUserAssetsModalOpen(true); };
   const openViewModal = (record) => { setViewDevice(record); setIsViewModalOpen(true); };
 
-  // --- COLUMNS ---
+  // --- COLUMNS (FIXED WRAPPING) ---
   const publicColumns = [
     { title: '№', key: 'index', width: 50, render: (text, record, index) => <b>{index + 1}</b> },
-    { title: t('col_inv'), dataIndex: 'inventory_number', render: (tt, r) => tt ? <a onClick={() => openViewModal(r)} style={{ fontWeight: 'bold' }}>{tt}</a> : '-' },
-    { title: t('col_user'), dataIndex: 'owner_name', render: tt => tt ? <Tag color="purple">{tt}</Tag> : <span style={{ color: '#ccc' }}>-</span> },
-    { title: t('col_product'), dataIndex: 'name', render: tt => <b>{tt}</b> },
-    { title: t('label_cat'), dataIndex: 'type', render: tt => <Tag color="cyan">{tt}</Tag> },
-    { title: 'Прайс', dataIndex: 'price', render: tt => <Tag color="gold">{tt || '0'}</Tag> },
-    { title: t('col_location'), dataIndex: 'room_name', render: tt => <Tag color="blue">{tt}</Tag> },
-    { title: t('col_details'), dataIndex: 'details', render: tt => tt ? <span style={{ color: '#666' }}>{tt.length > 15 ? tt.substring(0, 15) + '...' : tt}</span> : '-' },
-    { title: t('col_status'), dataIndex: 'status', render: s => <Tag color={getStatusColor(s)}>{getStatusLabel(s)}</Tag> },
+    { 
+      title: t('col_inv'), 
+      dataIndex: 'inventory_number', 
+      width: 100, // Уменьшил ширину
+      render: (tt, r) => tt ? <a onClick={() => openViewModal(r)} style={{ fontWeight: 'bold' }}>{tt}</a> : '-' 
+    },
+    { 
+      title: t('col_user'), 
+      dataIndex: 'owner_name', 
+      width: 120, // Уменьшил ширину
+      render: tt => tt ? <Tag color="purple">{tt}</Tag> : <span style={{ color: '#ccc' }}>-</span> 
+    },
+    // 🔥 ИСПРАВЛЕНИЕ: Перенос текста на новую строку
+    { 
+      title: t('col_product'), 
+      dataIndex: 'name', 
+      width: 500, 
+      render: tt => (
+        <div style={{ whiteSpace: 'normal', wordWrap: 'break-word', fontWeight: 'bold' }}>
+           {tt}
+        </div>
+      )
+    },
+    { title: t('label_cat'), dataIndex: 'type', width: 100, render: tt => <Tag color="cyan">{tt}</Tag> },
+    { title: 'Прайс', dataIndex: 'price', width: 90, render: tt => <Tag color="gold">{tt || '0'}</Tag> },
+    { title: t('col_location'), dataIndex: 'room_name', width: 100, render: tt => <Tag color="blue">{tt}</Tag> },
+    { title: t('col_status'), dataIndex: 'status', width: 110, render: s => <Tag color={getStatusColor(s)}>{getStatusLabel(s)}</Tag> },
   ];
 
   const adminColumns = [
     ...publicColumns,
-    { title: t('col_action'), key: 'action', render: (_, r) => <Button icon={<EditOutlined />} onClick={() => openEditProductModal(r)} size="small" /> }
+    { title: t('col_action'), key: 'action', width: 60, render: (_, r) => <Button icon={<EditOutlined />} onClick={() => openEditProductModal(r)} size="small" /> }
   ];
 
   const empColumns = [
@@ -527,34 +537,57 @@ function App() {
   const menuItems = [
     { key: 'dashboard', icon: <AppstoreOutlined />, label: t('dashboard') },
     { key: 'references', icon: <BookOutlined />, label: 'Справочники' },
-    { key: 'logout', icon: <LogoutOutlined />, label: t('logout'), danger: true, style: { marginTop: '50px' } },
+    { key: 'logout', icon: <LogoutOutlined />, label: t('logout'), danger: true, style: { marginTop: 'auto' } },
   ];
 
+  // ====================== QR PUBLIC VIEW (ONLY CARD) ======================
+  if (isQrMode) {
+    return (
+        <div style={{ height: '100vh', width: '100%', background: '#f0f2f5', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            {loading ? <Spin size="large" /> : null}
+            <SharedModals 
+               t={t} isProductModalOpen={false} setIsProductModalOpen={setIsProductModalOpen}
+               productForm={productForm} handleSaveProduct={handleSaveProduct} rooms={rooms} categories={categories} employees={employees}
+               editingDevice={editingDevice} handleDeleteDevice={handleDeleteDevice}
+               isEmployeeModalOpen={false} setIsEmployeeModalOpen={setIsEmployeeModalOpen}
+               employeeForm={employeeForm} handleSaveEmployee={handleSaveEmployee} editingEmployee={editingEmployee}
+               isRoomModalOpen={false} setIsRoomModalOpen={setIsRoomModalOpen} roomForm={roomForm} handleSaveRoom={handleSaveRoom} editingRoom={editingRoom}
+               isCategoryModalOpen={false} setIsCategoryModalOpen={setIsCategoryModalOpen} categoryForm={categoryForm} handleSaveCategory={handleSaveCategory} editingCategory={editingCategory}
+               isViewModalOpen={isViewModalOpen} setIsViewModalOpen={setIsViewModalOpen} viewDevice={viewDevice}
+               downloadQRCode={downloadQRCode}
+               lang={lang}
+            />
+             {!isViewModalOpen && !loading && (
+                 <div style={{textAlign: 'center'}}>
+                     <h3>Инвентаризация</h3>
+                     <p>Сканирование завершено. Вы можете закрыть страницу.</p>
+                 </div>
+             )}
+        </div>
+    )
+  }
+
   // ====================== LOGIN SCREEN ======================
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !isQrMode) {
     return (
       <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
         <Card style={{ width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(31, 47, 97, 0.15)', borderRadius: 20, border: 'none' }}>
           <div style={{ marginBottom: 40, textAlign: 'center' }}>
             <div style={{ width: 70, height: 70, background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', margin: '0 auto', fontSize: 32, marginBottom: 16 }}><LaptopOutlined /></div>
-            <Typography.Title level={2} style={{ marginBottom: 8, color: '#1f2f61', fontWeight: 700 }}>InnoTechnopark</Typography.Title>
+            <Typography.Title level={2} style={{ marginBottom: 8, color: '#1f2f61', fontWeight: 700 }}>Inver.uz</Typography.Title>
             <Typography.Text style={{ color: '#6b7280', fontSize: 14 }}>{t('site_access')}</Typography.Text>
           </div>
-
           <Form form={loginForm} layout="vertical" onFinish={handleGlobalLogin}>
             <Form.Item name="username" rules={[{ required: true, message: t('username') + ' required' }]}>
               <Input prefix={<UserOutlined />} placeholder={t('username')} size="large" style={{ borderRadius: 10, borderColor: '#e5e7eb' }} />
             </Form.Item>
-
             <Form.Item name="password" rules={[{ required: true, message: t('password') + ' required' }]}>
               <Input.Password prefix={<LockOutlined />} placeholder={t('password')} size="large" style={{ borderRadius: 10, borderColor: '#e5e7eb' }} />
             </Form.Item>
-
             <Button type="primary" htmlType="submit" block size="large" style={{ borderRadius: 10, background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)', border: 'none', fontWeight: 600, height: 48 }}>
               {t('login_system')}
             </Button>
           </Form>
-
           <div style={{ marginTop: 24, paddingTop: 24, borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'center' }}>
             <LanguageSwitcher currentLang={lang} onLangChange={setLang} />
           </div>
@@ -567,126 +600,112 @@ function App() {
   return (
     <Layout style={{ minHeight: '100vh', background: '#f8fafb' }}>
       {appMode === 'admin' && !isMobile && (
-        <Sider theme="light" width={280} style={{ borderRight: '1px solid #e5e7eb', background: '#fff' }}>
-          <div style={{ padding: '24px 20px', fontSize: '20px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 12, color: '#1f2f61', borderBottom: '1px solid #e5e7eb' }}>
-            <div style={{ width: 40, height: 40, background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 18 }}><LaptopOutlined /></div>
-            {t('admin_panel')}
+        <Sider 
+          theme="light" 
+          width={280} 
+          collapsible 
+          collapsed={collapsed} 
+          onCollapse={(value) => setCollapsed(value)}
+          trigger={null} 
+          style={{ borderRight: '1px solid #e5e7eb', background: '#fff' }}
+        >
+          <div style={{ padding: collapsed ? '24px 8px' : '24px 20px', fontSize: '20px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 12, color: '#1f2f61', borderBottom: '1px solid #e5e7eb', justifyContent: collapsed ? 'center' : 'flex-start' }}>
+            <div style={{ width: 40, height: 40, background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 18, flexShrink: 0 }}><LaptopOutlined /></div>
+            {!collapsed && t('admin_panel')}
           </div>
-
-          {/* ✅ FIX: menu использует activePage, а не currentPage */}
           <Menu
             mode="inline"
             selectedKeys={[activePage]}
             items={menuItems}
             onClick={(e) => {
-              if (e.key === 'logout') setAppMode('public');
+              if (e.key === 'logout') handleGlobalLogout();
               else setActivePage(e.key);
             }}
-            style={{ border: 'none' }}
+            style={{ border: 'none', marginTop: 10 }}
           />
-
-          <div style={{ padding: '20px' }}>
-            <LanguageSwitcher currentLang={lang} onLangChange={setLang} />
-          </div>
         </Sider>
       )}
 
       <Layout>
-        <Header style={{ background: '#fff', padding: isMobile ? '0 16px' : '0 60px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e5e7eb', height: isMobile ? 64 : 72, boxShadow: '0 2px 16px rgba(31, 47, 97, 0.08)' }}>
-          {appMode === 'admin' && isMobile && (
-            <Button type="text" icon={<MenuOutlined />} onClick={() => setDrawerVisible(true)} style={{ fontSize: 20 }} />
-          )}
+        <Header style={{ background: '#fff', padding: isMobile ? '0 16px' : '0 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e5e7eb', height: 72, boxShadow: '0 2px 16px rgba(31, 47, 97, 0.08)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+             {/* Кнопка открытия/закрытия меню */}
+             {appMode === 'admin' && (
+                 isMobile ? (
+                     <Button type="text" icon={<MenuOutlined />} onClick={() => setDrawerVisible(true)} style={{ fontSize: 20 }} />
+                 ) : (
+                     <Button 
+                        type="text" 
+                        icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} 
+                        onClick={() => setCollapsed(!collapsed)} 
+                        style={{ fontSize: 18 }} 
+                     />
+                 )
+             )}
 
-          {appMode === 'public' ? (
-            <div className="mobile-header-logo" style={{ fontSize: isMobile ? '16px' : '22px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, color: '#1f2f61' }}>
-              <div style={{ width: isMobile ? 32 : 40, height: isMobile ? 32 : 40, background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}><LaptopOutlined /></div>
-              {!isMobile && 'InnoTechnopark'} {!isMobile && <span style={{ fontSize: 12, fontWeight: 500, color: '#9ca3af', marginLeft: 12, backgroundColor: '#f3f4f6', padding: '4px 12px', borderRadius: 20 }}>{t('public_portal')}</span>}
-            </div>
-          ) : (
-            <Input
-              prefix={<SearchOutlined style={{ color: '#9ca3af' }} />}
-              placeholder={t('search_placeholder')}
-              style={{ width: 320, borderRadius: 10, background: '#f3f4f6', border: '1px solid #e5e7eb', padding: '10px 16px' }}
-              value={searchText}
-              onChange={e => setSearchText(e.target.value)}
-            />
-          )}
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12 }}>
             {appMode === 'public' ? (
-              <>
-                {!isMobile && <LanguageSwitcher currentLang={lang} onLangChange={setLang} />}
-                <Button className={isMobile ? 'mobile-hide-text' : ''} type="default" icon={<LockOutlined />} onClick={() => setIsAdminLoginModalOpen(true)} style={{ borderRadius: 8, borderColor: '#e5e7eb', color: '#374151' }}>
-                  {!isMobile && t('login_admin')}
-                </Button>
-              </>
+              <div className="mobile-header-logo" style={{ fontSize: isMobile ? '16px' : '22px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, color: '#1f2f61' }}>
+                 {!isMobile && <div style={{ width: 40, height: 40, background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}><LaptopOutlined /></div>}
+                 {!isMobile && 'Inver.uz'}
+                
+              </div>
+            ) : (
+              <Input
+                prefix={<SearchOutlined style={{ color: '#9ca3af' }} />}
+                placeholder={t('search_placeholder')}
+                style={{ width: isMobile ? 150 : 320, borderRadius: 10, background: '#f3f4f6', border: '1px solid #e5e7eb', padding: '8px 16px' }}
+                value={searchText}
+                onChange={e => setSearchText(e.target.value)}
+              />
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <LanguageSwitcher currentLang={lang} onLangChange={setLang} />
+            
+            {appMode === 'public' ? (
+              <Button className={isMobile ? 'mobile-hide-text' : ''} type="default" icon={<LockOutlined />} onClick={() => setIsAdminLoginModalOpen(true)} style={{ borderRadius: 8, borderColor: '#e5e7eb', color: '#374151' }}>
+                {!isMobile && t('login_admin')}
+              </Button>
             ) : (
               <Button className={isMobile ? 'mobile-hide-text' : ''} type="default" icon={<ArrowLeftOutlined />} onClick={() => setAppMode('public')} style={{ borderRadius: 8, borderColor: '#e5e7eb' }}>
                 {!isMobile && t('back_to_site')}
               </Button>
             )}
+            
             <Tooltip title="Exit System">
               <Button type="text" danger icon={<PoweroffOutlined />} onClick={handleGlobalLogout} style={{ color: '#ef4444', borderRadius: 8 }} />
             </Tooltip>
           </div>
         </Header>
-
-        <Content style={{ padding: isMobile ? '16px 12px' : '40px 60px' }}>
-          <div style={{ margin: '0 auto', maxWidth: appMode === 'public' ? undefined : 1600 }}>
+{/* 👇 Добавил marginTop, чтобы сильно сдвинуть вниз */}
+        <Content style={{ padding: isMobile ? '16px' : '30px' }}>
+          <div style={{ margin: '0 auto', maxWidth: '100%', marginTop: isMobile ? 20 : 25 }}>
             {appMode === 'public' && (
               <Row gutter={isMobile ? 8 : 16} style={{ marginBottom: isMobile ? 16 : 24 }}>
                 <Col xs={12} sm={12} md={6}>
-                  <Card variant="borderless">
-                    <Statistic
-                      title={<span style={{ color: '#0369a1', fontWeight: 600 }}>{t('total_devices')}</span>}
-                      value={allDevices?.length || 0}
-                      prefix={<LaptopOutlined style={{ color: '#0284c7' }} />}
-                      styles={{ content: { color: '#0369a1', fontSize: isMobile ? 20 : 32, fontWeight: 700 } }}
-                    />
-                  </Card>
+                   <Card variant="borderless"><Statistic title={<span style={{ color: '#0369a1', fontWeight: 600 }}>{t('total_devices')}</span>} value={allDevices?.length || 0} prefix={<LaptopOutlined style={{ color: '#0284c7' }} />} styles={{ content: { color: '#0369a1', fontSize: isMobile ? 20 : 32, fontWeight: 700 } }} /></Card>
                 </Col>
                 <Col xs={12} sm={12} md={6}>
-                  <Card variant="borderless">
-                    <Statistic
-                      title={<span style={{ color: '#15803d', fontWeight: 600 }}>{t('assigned')}</span>}
-                      value={(allDevices || []).filter(d => d.owner_name).length}
-                      prefix={<UserOutlined style={{ color: '#22c55e' }} />}
-                      styles={{ content: { color: '#15803d', fontSize: isMobile ? 20 : 32, fontWeight: 700 } }}
-                    />
-                  </Card>
+                   <Card variant="borderless"><Statistic title={<span style={{ color: '#15803d', fontWeight: 600 }}>{t('assigned')}</span>} value={(allDevices || []).filter(d => d.owner_name).length} prefix={<UserOutlined style={{ color: '#22c55e' }} />} styles={{ content: { color: '#15803d', fontSize: isMobile ? 20 : 32, fontWeight: 700 } }} /></Card>
                 </Col>
                 <Col xs={12} sm={12} md={6}>
-                  <Card variant="borderless">
-                    <Statistic
-                      title={<span style={{ color: '#991b1b', fontWeight: 600 }}>{t('broken')}</span>}
-                      value={(allDevices || []).filter(d => d.status === 'broken').length}
-                      prefix={<SettingTwoTone style={{ color: '#dc2626' }} />}
-                      styles={{ content: { color: '#991b1b', fontSize: isMobile ? 20 : 32, fontWeight: 700 } }}
-                    />
-                  </Card>
+                   <Card variant="borderless"><Statistic title={<span style={{ color: '#991b1b', fontWeight: 600 }}>{t('broken')}</span>} value={(allDevices || []).filter(d => d.status === 'broken').length} prefix={<SettingTwoTone style={{ color: '#dc2626' }} />} styles={{ content: { color: '#991b1b', fontSize: isMobile ? 20 : 32, fontWeight: 700 } }} /></Card>
                 </Col>
                 <Col xs={12} sm={12} md={6}>
-                  <Card variant="borderless">
-                    <Statistic
-                      title={<span style={{ color: '#be185d', fontWeight: 600 }}>{t('rooms')}</span>}
-                      value={rooms?.length || 0}
-                      prefix={<BankOutlined style={{ color: '#ec4899' }} />}
-                      styles={{ content: { color: '#be185d', fontSize: isMobile ? 20 : 32, fontWeight: 700 } }}
-                    />
-                  </Card>
+                   <Card variant="borderless"><Statistic title={<span style={{ color: '#be185d', fontWeight: 600 }}>{t('rooms')}</span>} value={rooms?.length || 0} prefix={<BankOutlined style={{ color: '#ec4899' }} />} styles={{ content: { color: '#be185d', fontSize: isMobile ? 20 : 32, fontWeight: 700 } }} /></Card>
                 </Col>
               </Row>
             )}
 
-            <div style={{ background: '#fff', padding: 32, borderRadius: 16, minHeight: '80vh', boxShadow: '0 4px 24px rgba(31, 47, 97, 0.08)', border: '1px solid #e5e7eb' }}>
-              {/* ✅ FIX: используем activePage, а не currentPage */}
+            <div style={{ background: '#fff', padding: 24, borderRadius: 16, minHeight: '80vh', boxShadow: '0 4px 24px rgba(31, 47, 97, 0.08)', border: '1px solid #e5e7eb' }}>
+              {/* ADMIN MODE - REFERENCES TAB */}
               {appMode === 'admin' && activePage === 'references' ? (
                 <Tabs
                   defaultActiveKey="1"
                   items={[
                     {
-                      key: '1',
-                      label: <span><TeamOutlined /> Сотрудники</span>,
+                      key: '1', label: <span><TeamOutlined /> Сотрудники</span>,
                       children: (
                         <>
                           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
@@ -697,8 +716,7 @@ function App() {
                       )
                     },
                     {
-                      key: '2',
-                      label: <span><BankOutlined /> Комнаты</span>,
+                      key: '2', label: <span><BankOutlined /> Комнаты</span>,
                       children: (
                         <>
                           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
@@ -709,8 +727,7 @@ function App() {
                       )
                     },
                     {
-                      key: '3',
-                      label: <span><AppstoreOutlined /> Категории</span>,
+                      key: '3', label: <span><AppstoreOutlined /> Категории</span>,
                       children: (
                         <>
                           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
@@ -723,18 +740,18 @@ function App() {
                   ]}
                 />
               ) : (
+                /* MAIN TABLE VIEW */
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
                     {appMode === 'public' && (
                       <Input
                         prefix={<SearchOutlined style={{ color: '#9ca3af' }} />}
                         placeholder={t('search_placeholder')}
-                        style={{ width: 300, borderRadius: 8 }}
+                        style={{ width: 500, borderRadius: 8 }}
                         value={searchText}
                         onChange={e => setSearchText(e.target.value)}
                       />
                     )}
-
                     <Space wrap>
                       {appMode === 'admin' && (
                         <>
@@ -743,15 +760,12 @@ function App() {
                           <Button icon={<PrinterOutlined />} disabled={selectedDevices.length === 0} onClick={handlePrintQR}>Печать QR ({selectedDevices.length})</Button>
                         </>
                       )}
-
                       <Select placeholder={t('rooms')} style={{ width: 140 }} allowClear value={filterRoom} onChange={setFilterRoom}>
                         {rooms.map(r => <Option key={r.id} value={r.id}>{r.room_name}</Option>)}
                       </Select>
-
                       <Select placeholder={t('label_cat')} style={{ width: 140 }} allowClear value={filterCategory} onChange={setFilterCategory}>
                         {categories.map(c => <Option key={c.id} value={c.name}>{c.name}</Option>)}
                       </Select>
-
                       <Select placeholder={t('label_status')} style={{ width: 140 }} allowClear value={filterStatus} onChange={setFilterStatus}>
                         <Option value="working">{lang === 'uz' ? 'Ishlayapti' : 'В работе'}</Option>
                         <Option value="in_stock">{lang === 'uz' ? 'Omborda' : 'На складе'}</Option>
@@ -759,33 +773,27 @@ function App() {
                         <Option value="broken">{lang === 'uz' ? 'Buzilgan' : 'Сломано'}</Option>
                         <Option value="decommissioned">{lang === 'uz' ? 'Hisobdan chiqarilgan' : 'Списано'}</Option>
                       </Select>
-
                       <Button type="text" danger onClick={resetFilters}>{t('reset_filter')}</Button>
                     </Space>
-
                     {appMode === 'admin' && <Button type="primary" icon={<PlusOutlined />} onClick={openCreateProductModal}>{t('add_product')}</Button>}
                   </div>
 
                   <div className="mobile-table-wrapper" style={{ overflowX: 'auto' }}>
                     <Table
                       columns={appMode === 'admin' ? adminColumns : publicColumns}
-                      dataSource={pagedDevices}  // ✅ FIX
+                      dataSource={pagedDevices}
                       loading={loading}
                       rowSelection={appMode === 'admin' ? {
                         selectedRowKeys: selectedDevices,
                         onChange: (keys) => setSelectedDevices(keys)
                       } : undefined}
                       pagination={{
-                        current: safeCurrent,        // ✅ FIX
-                        pageSize: safePageSize,      // ✅ FIX
-                        total: totalFiltered,        // ✅ FIX
+                        current: safeCurrent,
+                        pageSize: safePageSize,
+                        total: totalFiltered,
                         showSizeChanger: true,
                         pageSizeOptions: ['10', '20', '50', '100'],
-                        showTotal: () => {
-                          const from = totalFiltered === 0 ? 0 : startIndex + 1;
-                          const to = Math.min(endIndex, totalFiltered);
-                          return `${from}-${to} из ${totalFiltered}`;
-                        },
+                        showTotal: (total, range) => `${range[0]}-${range[1]} из ${total}`,
                         onChange: (page, size) => {
                           setCurrentPage(page >= 1 ? page : 1);
                           setPageSize(size >= 1 ? size : 10);
@@ -810,11 +818,11 @@ function App() {
 
         {/* IMPORT MODAL */}
         <Modal title="Импорт из Excel" open={isImportModalOpen} onCancel={() => setIsImportModalOpen(false)} footer={null}>
-          <p>Загрузите файл .xlsx. Колонки: Название, Категория, Прайс, Инв. номер, Статус, Комната.</p>
-          <Upload.Dragger customRequest={handleImport} showUploadList={false}>
-            <p className="ant-upload-drag-icon"><UploadOutlined /></p>
-            <p className="ant-upload-text">Нажмите или перетащите файл сюда</p>
-          </Upload.Dragger>
+           <p>Загрузите файл .xlsx. Колонки: Название, Категория, Прайс, Инв. номер, Статус, Комната.</p>
+           <Upload.Dragger customRequest={handleImport} showUploadList={false}>
+             <p className="ant-upload-drag-icon"><UploadOutlined /></p>
+             <p className="ant-upload-text">Нажмите или перетащите файл сюда</p>
+           </Upload.Dragger>
         </Modal>
 
         <SharedModals
@@ -846,8 +854,8 @@ function App() {
           placement="left"
           onClose={() => setDrawerVisible(false)}
           open={drawerVisible}
-          size="default"               // ✅ вместо width (deprecated)
-          style={{ width: 280 }}       // чтобы визуально осталось как раньше
+          size="default"
+          style={{ width: 280 }}
         >
           <Menu
             mode="inline"
@@ -855,8 +863,8 @@ function App() {
             items={menuItems}
             onClick={(e) => {
               if (e.key === 'logout') {
-                setAppMode('public');
-                setDrawerVisible(false);
+                 handleGlobalLogout();
+                 setDrawerVisible(false);
               } else {
                 setActivePage(e.key);
                 setDrawerVisible(false);
@@ -864,9 +872,6 @@ function App() {
             }}
             style={{ border: 'none' }}
           />
-          <div style={{ padding: '20px' }}>
-            <LanguageSwitcher currentLang={lang} onLangChange={setLang} />
-          </div>
         </Drawer>
       </Layout>
     </Layout>
@@ -955,11 +960,9 @@ const SharedModals = ({
             />
             <div style={{ marginTop: 10, fontWeight: 'bold', color: '#555' }}>{viewDevice.inventory_number}</div>
           </div>
-
           <div style={{ marginBottom: 20 }}>
             <Button type="dashed" icon={<DownloadOutlined />} onClick={downloadQRCode}>Скачать QR</Button>
           </div>
-
           <Descriptions bordered column={1} size="small" style={{ textAlign: 'left' }}>
             <Descriptions.Item label={t('col_product')}>{viewDevice.name}</Descriptions.Item>
             <Descriptions.Item label={t('label_cat')}>{viewDevice.type}</Descriptions.Item>
