@@ -5,7 +5,7 @@
     /* Убираем сайдбар */
     .ant-layout-sider {
         display: none !important;
-    }
+    
 
     /* HEADER */
     .ant-layout-header {
@@ -134,3 +134,4 @@
         white-space: nowrap !important;
         padding: 12px 8px !important;
     }
+}

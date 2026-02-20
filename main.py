@@ -69,6 +69,10 @@ class EmployeeCreate(BaseModel):
 class QRExportRequest(BaseModel):
     device_ids: List[int]
 
+# --- НОВАЯ СХЕМА ДЛЯ МАССОВОГО УДАЛЕНИЯ ---
+class BatchDeleteRequest(BaseModel):
+    ids: List[int]
+
 def get_db():
     db = SessionLocal()
     try:
@@ -136,7 +140,6 @@ def create_room(room: RoomCreate, db: Session = Depends(get_db)):
     db.refresh(new_room)
     return new_room
 
-# !!! ДОБАВЛЕН НЕДОСТАЮЩИЙ МЕТОД !!!
 @app.get("/rooms/")
 def get_rooms(db: Session = Depends(get_db)):
     return db.query(models.Room).all()
@@ -218,7 +221,32 @@ def delete_device(device_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "deleted"}
 
-# REPORT (ИСПРАВЛЕНО ИМЯ КОМНАТЫ)
+# --- НОВЫЙ МЕТОД: МАССОВОЕ УДАЛЕНИЕ ---
+@app.post("/devices/batch-delete")
+def batch_delete_devices(request: BatchDeleteRequest, db: Session = Depends(get_db)):
+    """
+    Массовое удаление устройств по списку ID
+    """
+    try:
+        # Находим все устройства, ID которых есть в списке
+        query = db.query(models.Device).filter(models.Device.id.in_(request.ids))
+        
+        deleted_count = query.count()
+        if deleted_count == 0:
+            # Если ничего не нашли, просто возвращаем 0, но не ошибку
+            return {"message": "Ничего не удалено", "count": 0}
+
+        # Выполняем удаление
+        query.delete(synchronize_session=False)
+        db.commit()
+        
+        return {"message": f"Успешно удалено {deleted_count} устройств", "count": deleted_count}
+    except Exception as e:
+        db.rollback()
+        print(f"Ошибка при массовом удалении: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка сервера при удалении данных")
+
+# REPORT
 @app.get("/report")
 def get_full_report(db: Session = Depends(get_db)):
     rooms = db.query(models.Room).all()
@@ -236,7 +264,6 @@ def get_full_report(db: Session = Depends(get_db)):
                 "room_name": r.name, "employee_id": d.employee_id, "owner_name": owner_name
             })
         
-        # !!! ИСПРАВЛЕНИЕ: Добавлено поле 'name', так как frontend ждет именно его в таблице настроек
         rooms_data.append({
             "id": r.id, 
             "name": r.name,       # Для таблицы настроек
@@ -374,6 +401,8 @@ def backup_database():
     import shutil
     from datetime import datetime
     backup_name = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+    if not os.path.exists("backups"):
+        os.makedirs("backups")
     shutil.copy2("inventory.db", f"backups/{backup_name}")
     return {"message": f"Backup created: {backup_name}"}
 

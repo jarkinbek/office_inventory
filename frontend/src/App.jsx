@@ -464,13 +464,12 @@ function App() {
     },
     // 🔥 ИСПРАВЛЕНИЕ: Перенос текста на новую строку
     { 
-      title: t('col_product'), 
-      dataIndex: 'name', 
-      width: 500, 
-      render: tt => (
-        <div style={{ whiteSpace: 'normal', wordWrap: 'break-word', fontWeight: 'bold' }}>
-           {tt}
-        </div>
+     title: t('col_product'), 
+  dataIndex: 'name', 
+  render: tt => (
+    <div style={{ whiteSpace: 'normal', wordBreak: 'break-word', fontWeight: 'bold' }}>
+      {tt}
+    </div>
       )
     },
     { title: t('label_cat'), dataIndex: 'type', width: 100, render: tt => <Tag color="cyan">{tt}</Tag> },
@@ -744,13 +743,15 @@ function App() {
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
                     {appMode === 'public' && (
+                      <div style={{ flex: 1, minWidth: 260 }}>
                       <Input
-                        prefix={<SearchOutlined style={{ color: '#9ca3af' }} />}
-                        placeholder={t('search_placeholder')}
-                        style={{ width: 500, borderRadius: 8 }}
-                        value={searchText}
-                        onChange={e => setSearchText(e.target.value)}
-                      />
+                       prefix={<SearchOutlined style={{ color: '#9ca3af' }} />}
+                       placeholder={t('search_placeholder')}
+                       style={{ width: '100%', maxWidth: 600, borderRadius: 8 }}
+                       value={searchText}
+                       onChange={e => setSearchText(e.target.value)}
+/>
+                      </div>
                     )}
                     <Space wrap>
                       {appMode === 'admin' && (
